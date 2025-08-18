@@ -1,0 +1,391 @@
+/* Ribbon Toolbar Styles */
+.toolbar.ribbon-bar {
+	position: fixed;
+	top: 0;
+	left: 0;
+	width: 100vw;
+	z-index: 100;
+	display: flex;
+	align-items: baseline; /* align to text baseline */
+	justify-content: flex-start;
+	background: #1e2a4a;
+	color: #fff;
+	padding: 2px 16px 10px 16px; /* remove extra gap below the toolbar */
+	box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+	flex-wrap: nowrap; /* force single line */
+	overflow-x: auto; /* allow horizontal scroll on narrow screens */
+}
+.branding { display: flex; flex-direction: row; align-items: flex-end; justify-content: flex-start; min-width: 180px; margin-right: 1.2rem; white-space: nowrap; overflow: hidden; }
+.brand-title { font-size: 1.5rem; font-weight: 700; color: #cbe6ff; letter-spacing: 1px; margin: 0; }
+.brand-desc { font-size: 0.95rem; color: #b3c7e6; margin: 0 0 0 8px; text-overflow: ellipsis; overflow: hidden; }
+.menu { display: flex; gap: 0.3rem; flex-wrap: nowrap; margin-right: 1.2rem; align-items: flex-end; }
+/* Modern blue buttons for toolbar in light mode */
+.toolbar.ribbon-bar .menu-btn {
+	background: #1e2a4a;
+	color: #cbe6ff;
+	border: 1px solid #294080;
+	padding: 0.5rem 1.2rem;
+	border-radius: 6px;
+	font-size: 1rem;
+	font-weight: 500;
+	cursor: pointer;
+	transition: background 0.2s, box-shadow 0.2s, border 0.2s;
+	box-shadow: 0 2px 8px rgba(30,42,74,0.08);
+}
+.toolbar.ribbon-bar .menu-btn:hover, .toolbar.ribbon-bar .menu-btn:focus {
+	background: #294080;
+	color: #fff;
+	border: 1px solid #3b5998;
+	outline: none;
+}
+/* Keep dark mode buttons unchanged */
+.toolbar.ribbon-bar.dark .menu-btn {
+	background: #23325a;
+	color: #e3f0ff;
+	border: none;
+}
+.toolbar-right {
+	display: flex;
+	align-items: center;
+	margin-left: auto;
+}
+.theme-toggle-label {
+	color: #cbe6ff;
+	font-size: 1rem;
+	margin-right: 0.5rem;
+}
+/* Custom left-to-right switch for dark mode */
+.theme-switch {
+	width: 44px;
+	height: 24px;
+	background: #23325a;
+	border-radius: 999px;
+	position: relative;
+	cursor: pointer;
+	transition: background 0.2s;
+	display: inline-block;
+}
+.theme-switch::after {
+	content: '';
+	position: absolute;
+	top: 3px;
+	left: 3px;
+	width: 18px;
+	height: 18px;
+	background: #e3f0ff;
+	border-radius: 50%;
+	transition: transform 0.2s;
+}
+.theme-switch[data-on="true"] {
+	background: #2a3a6a;
+}
+.theme-switch[data-on="true"]::after {
+	transform: translateX(20px);
+	background: #181f2f;
+}
+body.dark-mode {
+	background: #181f2f;
+	color: #e3f0ff;
+}
+.toolbar.ribbon-bar.dark {
+	background: #181f2f;
+	color: #e3f0ff;
+}
+.brand-title.dark, .brand-desc.dark, .theme-toggle-label.dark {
+	color: #e3f0ff;
+}
+@media (max-width: 700px) {
+	.toolbar.ribbon-bar { flex-direction: row; align-items: flex-end; padding: 6px 12px 14px 12px; }
+	.menu { justify-content: flex-start; margin-right: 0; }
+}
+:root {
+    /* default values will be overridden by theme classes */
+    --bg: #0f172a;
+    --panel: #111827;
+    --text: #e5e7eb;
+    --muted: #94a3b8;
+    --border: #1f2937;
+    --primary: #3b82f6;
+    --danger: #ef4444;
+    --success: #22c55e;
+}
+
+/* Light mode = existing colours */
+.theme-light {
+    --bg: #0f172a;
+    --panel: #111827;
+    --text: #e5e7eb;
+    --muted: #94a3b8;
+    --border: #1f2937;
+    --primary: #3b82f6;
+    --danger: #ef4444;
+    --success: #22c55e;
+    --thead: #0f1a2e;
+    --row-alt: #0e1627;
+}
+
+/* Dark mode = industry standard dark palette with slightly higher contrast */
+.theme-dark {
+    /* Align with Monaco vs-dark */
+    --bg: #1e1e1e;
+    --panel: #1e1e1e;
+    --text: #d4d4d4;
+    --muted: #9aa7b8;
+    --border: #2d2d2d;
+    --primary: #569cd6;
+    --danger: #f44747;
+    --success: #89d185;
+    --thead: #252526;
+    --row-alt: #1b1b1b;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+	margin: 0;
+	font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+	background: var(--bg);
+	color: var(--text);
+}
+
+.app-header { padding: 24px 20px 8px 20px; }
+.app-header h1 { margin: 0 0 6px 0; font-size: 24px; }
+.app-header p { margin: 0; color: var(--muted); }
+
+.theme-toggle { display: inline-flex; align-items: center; gap: 8px; margin-top: 6px; }
+.switch { position: relative; width: 46px; height: 24px; background: var(--border); border-radius: 999px; cursor: pointer; }
+.switch::after { content: ''; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; background: var(--text); border-radius: 50%; transition: transform 0.2s ease; }
+.switch[data-on="true"] { background: #14532d; }
+.switch[data-on="true"]::after { transform: translateX(22px); }
+
+.app-main { padding: 12px 20px 24px 20px; }
+
+.toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 12px; }
+.toolbar-left, .toolbar-right { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+/* Align SQL toolbar group with left edge of SQL pad (right column of main grid) */
+#sqlToolbarGroup {
+	/* app-main has 20px left padding; grid has 16px gap; left column is 1/(1+1.3)=0.43478 of inner width; toolbar has 1.5rem left padding */
+	margin-left: calc((100vw - 40px) * 0.4347826 + 16px + 20px - 1.5rem);
+}
+
+.btn {
+	padding: 8px 12px;
+	border: 1px solid var(--border);
+	background: var(--panel);
+	color: var(--text);
+	border-radius: 8px;
+	cursor: pointer;
+}
+.btn.primary { border-color: #1e3a8a; background: var(--panel); color: #dbeafe; }
+.btn.danger { border-color: #7f1d1d; background: var(--panel); color: #fee2e2; }
+.btn.success { border-color: #14532d; background: #0b1d12; color: #dcfce7; }
+.btn:focus { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+.muted { color: var(--muted); }
+.status-row { padding: 6px 2px; }
+/* eliminate extra 5px gap under brand-desc area */
+.branding + .menu { margin-top: 0; }
+
+/* Responsive Toolbar Styles */
+.toolbar { display: flex; align-items: center; justify-content: space-between; background: #222; padding: 0; flex-wrap: wrap; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+
+.branding {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	min-width: 180px;
+}
+.brand-title {
+	font-size: 1.5rem;
+	font-weight: bold;
+	color: #fff;
+	letter-spacing: 1px;
+}
+.brand-desc {
+	font-size: 0.95rem;
+	color: #bbb;
+}
+
+.menu {
+	display: flex;
+	gap: 0.5rem;
+	flex-wrap: wrap;
+}
+.menu-btn {
+	background: #333;
+	color: #fff;
+	border: none;
+	padding: 0.5rem 1.2rem;
+	border-radius: 4px;
+	font-size: 1rem;
+	cursor: pointer;
+	transition: background 0.2s, box-shadow 0.2s;
+	box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+}
+.menu-btn:hover, .menu-btn:focus {
+	background: #444;
+	outline: none;
+}
+
+@media (max-width: 700px) {
+	.toolbar {
+		flex-direction: column;
+		align-items: stretch;
+		padding: 0.5rem;
+	}
+	.branding {
+		margin-bottom: 0.5rem;
+	}
+	.menu {
+		justify-content: flex-start;
+	}
+	#sqlToolbarGroup { margin-left: 0; }
+}
+textarea {
+	width: 100%;
+	min-height: var(--editor-height, 320px);
+	resize: vertical;
+	padding: 10px;
+	background: var(--panel);
+	color: var(--text);
+	border: 1px solid var(--border);
+	border-radius: 10px;
+	font-size: 14px;
+	line-height: 1.45;
+}
+
+/* Radios and actions inline, allow wrapping */
+.left .pane-header { gap: 6px; display: flex; flex-direction: row; align-items: center; flex-wrap: nowrap; white-space: nowrap; overflow-x: auto; }
+.left .pane-header .left-actions { display: inline-flex; gap: 8px; flex-wrap: wrap; margin-left: 0; }
+.left .pane-header .left-actions .btn { padding: 6px 10px; border-radius: 8px; }
+
+/* Keep Input controls on one line left-aligned when space allows */
+.left .pane-header > * { margin-bottom: 0; }
+.left .pane-header { row-gap: 0; }
+
+.layout {
+	display: grid;
+	grid-template-columns: 1fr 1.3fr;
+	gap: 16px;
+}
+.sql-actions { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
+
+.left .pane-header, .right .pane-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 6px;
+}
+
+.left-controls, .right-controls { display: flex; gap: 8px; align-items: center; }
+.source-chooser { display: inline-flex; gap: 8px; align-items: center; margin-left: 0; color: var(--muted); }
+.source-chooser label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+.tree { border: 1px solid var(--border); border-radius: 10px; padding: 10px; background: var(--panel); max-height: 520px; overflow: auto; }
+.tree ul { list-style: none; margin: 0; padding-left: 16px; }
+.tree li { margin: 2px 0; }
+.tree .key { color: var(--primary); }
+.tree .type { color: var(--muted); margin-left: 6px; }
+
+/* Collapsible tree view */
+.tree li { position: relative; }
+.tree .caret { cursor: pointer; display: inline-block; width: 1em; -webkit-user-select: none; user-select: none; color: var(--muted); }
+.tree li.has-children > .caret::before { content: '\25BE'; /* ▾ */ display: inline-block; transition: transform 0.12s ease; }
+.tree li.collapsed > .caret::before { transform: rotate(-90deg); }
+.tree li.collapsed > ul { display: none; }
+.tree .caret:focus { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 4px; }
+
+.tabs { display: flex; gap: 8px; margin-bottom: 8px; }
+.tab {
+	background: var(--panel);
+	border: 1px solid var(--border);
+	color: var(--text);
+	padding: 8px 12px;
+	border-radius: 8px;
+	cursor: pointer;
+}
+.tab.active { outline: 2px solid var(--primary); }
+
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+.code {
+	background: var(--panel);
+	border: 1px solid var(--border);
+	border-radius: 10px;
+	padding: 12px;
+	max-height: 320px;
+	min-height: 160px;
+	overflow: auto;
+}
+
+.table-wrap { margin-top: 8px; overflow: auto; max-height: 520px; border: 1px solid var(--border); border-radius: 10px; }
+
+/* Multi-table stack separators */
+.multi-table .table-wrap { margin-top: 10px; }
+.multi-table h3 { margin: 10px 0 4px 2px; font-size: 1rem; color: var(--text); }
+.multi-table .separator { height: 10px; }
+
+/* Results header right-side controls */
+.results-controls { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+#resultsFilter { background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; }
+.results-controls .rc-label, .rc-label { margin-right: 6px; }
+table {
+	width: 100%;
+	border-collapse: collapse;
+	background: var(--panel);
+	color: var(--text);
+}
+thead th {
+	position: sticky; top: 0;
+	background: var(--thead);
+	border-bottom: 1px solid var(--border);
+	text-align: left;
+	padding: 8px;
+	font-weight: 600;
+}
+tbody td { border-top: 1px solid var(--border); padding: 8px; vertical-align: top; }
+tbody tr:nth-child(odd) { background: var(--row-alt); }
+
+.monaco-wrap {
+	border: 1px solid var(--border);
+	border-radius: 10px;
+	min-height: 160px;
+	height: var(--editor-height, 320px);
+	overflow: hidden;
+	background: var(--panel);
+}
+
+/* Horizontal splitter bar */
+.h-splitter {
+	grid-column: 1 / -1;
+	height: 10px;
+	background: linear-gradient(to bottom, rgba(255,255,255,0.05), rgba(0,0,0,0.1));
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	cursor: row-resize;
+	margin: 2px 0 8px 0;
+}
+
+/* Results row spans both columns */
+.results { grid-column: 1 / -1; }
+
+@media (max-width: 1000px) {
+	.layout { grid-template-columns: 1fr; }
+	.toolbar { gap: 8px; }
+	#sqlToolbarGroup { margin-left: 0; }
+}
+
+/* Offset for fixed ribbon toolbar is set dynamically in JS via adjustContentOffset() */
+.app-main { padding-top: 0; }
+
+/* Left actions beneath the input header */
+.left-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; justify-content: flex-start; }
+.left-actions .btn { padding: 6px 10px; border-radius: 8px; }
+
+/* Ensure toolbar menu buttons have consistent spacing */
+.toolbar.ribbon-bar .menu { gap: 0.4rem; }
+
+/* bottom padding integrated above */
+
+

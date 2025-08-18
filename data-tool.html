@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>JsonXml2SQL — JSON/XML to SQL Pad</title>
+	<link rel="stylesheet" href="data-tool.css">
+	<meta name="description" content="JsonXml2SQL: Paste JSON or XML, visualize it, or run simple SQL-like queries in the browser.">
+</head>
+<body>
+	<header class="toolbar ribbon-bar" id="mainToolbar">
+		<div class="branding">
+			<span class="brand-title">JsonXml2SQL</span>
+			<span class="brand-desc">Paste JSON or XML on the left. Visualize or query on the right. Runs entirely in your browser.</span>
+		</div>
+		<nav class="menu" id="sqlToolbar" aria-label="SQL actions">
+			<button id="runSqlBtn" class="menu-btn">▶ Run</button>
+			<button id="clearSqlBtn" class="menu-btn">Clear SQL</button>
+			<button id="genInsertsBtn" class="menu-btn">Generate INSERTs</button>
+			<button id="clearStorageBtn" class="menu-btn">Clear Storage</button>
+		</nav>
+		<div class="toolbar-right">
+			<label class="theme-toggle-label" for="themeSwitch">Dark mode</label>
+			<div id="themeSwitch" class="theme-switch" tabindex="0" role="switch" aria-checked="false" aria-label="Toggle dark mode"></div>
+		</div>
+	</header>
+	<main class="app-main">
+		<section class="layout">
+			<div class="left">
+				<div class="pane-header">
+					<h2>Input</h2>
+					<div id="parseRadios" class="source-chooser" aria-label="Parse as"></div>
+					<div class="left-actions" aria-label="Load and sample actions">
+						<button id="loadBtn" class="btn">Load</button>
+						<button id="clearLeftBtn" class="btn">Clear</button>
+						<button id="sampleJsonBtn" class="btn">Sample JSON</button>
+						<button id="sampleXmlBtn" class="btn">Sample XML</button>
+					</div>
+				</div>
+				<textarea id="rawInput" placeholder="Paste JSON or XML here..."></textarea>
+				<div class="status-row">
+					<span id="inputInfo" class="muted">No data loaded.</span>
+				</div>
+			</div>
+
+			<div class="right">
+				<div class="pane-header"><h2>SQL Pad</h2></div>
+				<div id="sqlMonaco" class="monaco-wrap" aria-label="SQL editor"></div>
+				<div id="sqlStatus" class="status-row muted"></div>
+
+					<div class="pane-header">
+						<h2>Results</h2>
+						<div class="results-controls">
+							<label for="resultsFilter" class="muted rc-label">Filter:</label>
+						<select id="resultsFilter" aria-label="Filter results by table"></select>
+						<button id="downloadCsvBtn" class="btn" title="Download visible results as CSV">Download CSV</button>
+						<button id="downloadXlsBtn" class="btn" title="Download visible results as Excel">Download Excel</button>
+					</div>
+				</div>
+				<div class="tabs" id="resultsTabs">
+					<button class="tab active" data-tab="table">Table</button>
+					<button class="tab" data-tab="raw">Raw</button>
+					<button class="tab" data-tab="tree">Tree</button>
+				</div>
+				<div class="tab-panel active" id="panel-results-table">
+					<div class="table-wrap">
+						<table id="resultsTable"></table>
+					</div>
+				</div>
+				<div class="tab-panel" id="panel-results-raw">
+					<pre id="resultsRaw" class="code" aria-label="Raw results"></pre>
+				</div>
+				<div class="tab-panel" id="panel-results-tree">
+					<div id="resultsTree" class="tree" aria-label="Tree results"></div>
+				</div>
+			</div>
+		</section>
+	</main>
+
+	<footer class="app-footer">
+		<small>JsonXml2SQL supports simple SELECT queries over JSON/XML. FROM clause must be <code>data</code>.</small>
+	</footer>
+
+	<!-- Monaco Editor loader from CDN -->
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
+	<script>
+		window.__loadMonaco = function (cb) {
+			require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' } });
+			require(['vs/editor/editor.main'], function () { cb(window.monaco); });
+		};
+	</script>
+	<script src="data-tool.js"></script>
+</body>
+</html>
+
+
