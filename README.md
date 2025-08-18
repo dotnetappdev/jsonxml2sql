@@ -9,7 +9,7 @@ Paste JSON or XML on the left. Visualize or run simple SQL-like queries on the r
 - Three result views: Table, Raw (JSON), and Tree (collapsible with keyboard support)
 - Multi-table overview when you run `SELECT * FROM data`
   - Per-table row counts and quick filter
-  - Download visible data as CSV or Excel (XLS 2003 XML)
+  - Download visible data as CSV
 - Monaco editor with SQL keyword, FROM-path, and field completions
 - Theme toggle (light/dark), fixed toolbar, and responsive layout
 - Generate INSERT statements from current results
@@ -64,7 +64,7 @@ Notes:
 
 - Use the Sample JSON/XML buttons to seed the editor, then click Load.
 - Use the filter in Results to narrow the multi-table overview (from `SELECT * FROM data`).
-- To export, use Download CSV/Excel.
+- To export, use Download CSV.
 - Generate INSERTs from current results with the toolbar button.
 
 ## Accessibility
