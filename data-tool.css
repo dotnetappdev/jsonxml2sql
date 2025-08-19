@@ -392,10 +392,10 @@ tbody tr:nth-child(odd) { background: var(--row-alt); }
 .designer-table .dt-head .dt-title { font-size: 13.5px; }
 .designer-table .dt-body { max-height: 260px; overflow: auto; background: var(--bg); }
 .designer-table .dt-fields { list-style: none; margin: 0; padding: 4px 0; }
-.designer-table .dt-fields li { display: flex; align-items: center; gap: 10px; padding: 6px 10px; font-size: 13.5px; border-bottom: 1px dashed transparent; -webkit-user-select: none; user-select: none; }
+.designer-table .dt-fields li { display: flex; align-items: center; gap: 10px; padding: 6px 10px; font-size: 13.5px; border-bottom: 1px dashed transparent; -webkit-user-select: none; user-select: none; cursor: default; }
 .designer-table .dt-fields li:hover { background: var(--paper); border-bottom-color: var(--border); }
 .designer-table .dt-fields li.dragging { opacity: 0.7; }
-.dt-handle { width: 14px; height: 18px; cursor: grab; flex: 0 0 auto; opacity: 0.8; display: inline-block; position: relative; }
+.dt-handle { width: 14px; height: 18px; cursor: grab; flex: 0 0 auto; opacity: 0.9; display: inline-block; position: relative; color: var(--muted); }
 .dt-handle::before { content: ''; position: absolute; inset: 3px 2px; background-image: radial-gradient(currentColor 1px, transparent 1px); background-size: 4px 4px; background-position: 0 0; color: var(--muted); opacity: 0.8; }
 .dt-handle:active { cursor: grabbing; }
 .designer-field-check { -webkit-transform: scale(1.35); transform: scale(1.35); -webkit-transform-origin: center; transform-origin: center; accent-color: var(--accent, #2b6cf6); cursor: pointer; }
@@ -405,7 +405,8 @@ tbody tr:nth-child(odd) { background: var(--row-alt); }
 .designer-field-pin:active { transform: scale(0.95); }
 .designer-field-pin.pin-left { margin-left: 6px; }
 .designer-field-pin.pin-right { margin-left: auto; margin-right: 6px; }
-.designer-field { flex: 1 1 auto; font-size: 14px; line-height: 1.7; cursor: default; }
+.designer-field { flex: 1 1 auto; font-size: 14px; line-height: 1.7; cursor: default; color: var(--text); }
+.designer-field { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .designer-field[data-type="number"] { color: var(--text); }
 .designer-link-preview { stroke: var(--accent, #2b6cf6); stroke-width: 3; fill: none; opacity: 0.5; }
 /* Use these styles for SVG path links (curved) */
@@ -429,9 +430,17 @@ tbody tr:nth-child(odd) { background: var(--row-alt); }
 .output-list { list-style: none; margin: 0; padding: 0; border: 1px dashed var(--border); border-radius: 8px; min-height: 120px; background: var(--bg); }
 .output-list li { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-bottom: 1px solid var(--border); }
 .output-list li:last-child { border-bottom: none; }
+.output-list li { cursor: grab; }
+.output-list li:active { cursor: grabbing; }
+.output-list li:hover { background: rgba(86,156,214,0.12); }
 .output-handle { width: 14px; height: 18px; cursor: grab; position: relative; opacity: 0.8; }
 .output-handle::before { content: ''; position: absolute; inset: 3px 2px; background-image: radial-gradient(currentColor 1px, transparent 1px); background-size: 4px 4px; color: var(--muted); opacity: 0.8; }
 .output-remove { margin-left: auto; }
+
+/* Output card: make full row draggable and improve hover visibility */
+.designer-table[data-path="__output__"] .dt-fields li { cursor: grab; }
+.designer-table[data-path="__output__"] .dt-fields li:active { cursor: grabbing; }
+.designer-table[data-path="__output__"] .dt-fields li:hover { background: rgba(86,156,214,0.12); border-bottom-color: var(--border); }
 
 /* Output columns manager & SQL preview above designer */
 .designer-sql-preview { margin-bottom: 8px; }

@@ -305,6 +305,7 @@
 
   // ---- Output panel helpers ----
   let outputMonaco = null;
+  let designerSqlPreview = null;
   function ensureOutputMonaco(){
     try {
       if (outputMonaco || !window.__loadMonaco) return;
@@ -320,6 +321,79 @@
     } catch {}
   }
   function updateOutputPreview(sql){ try { if (outputMonaco) outputMonaco.setValue(sql || ''); } catch {} }
+  // Read-only SQL preview above the Designer tab
+  function ensureDesignerSqlPreview(){
+    try {
+      if (designerSqlPreview || !window.__loadMonaco) return;
+      window.__loadMonaco(function(monaco){
+        const host = document.getElementById('sqlPreviewMonaco');
+        if (!host) return;
+        designerSqlPreview = monaco.editor.create(host, {
+          value: '', language: 'sql', readOnly: true, automaticLayout: true,
+          fontSize: 14, minimap: {enabled:false}, lineNumbers: 'on', roundedSelection: false,
+          theme: 'vs-dark', wordWrap: 'off', scrollBeyondLastLine: false
+        });
+        try { if (monacoEditor) designerSqlPreview.setValue(monacoEditor.getValue()); } catch {}
+      });
+    } catch {}
+  }
+  function updateDesignerSqlPreview(sql){ try { if (designerSqlPreview) designerSqlPreview.setValue(sql || ''); } catch {} }
+  // Persist/restore output designer state
+  function persistOutputState(){
+    try {
+      const key = 'jsonxml2sql_output_columns';
+      const cols = Array.isArray(designerState.output.columns) ? designerState.output.columns : [];
+      const tables = Array.from(designerState.output.includedTables || []);
+      localStorage.setItem(key, JSON.stringify({ columns: cols, tables }));
+    } catch {}
+  }
+  function loadPersistedOutputState(ctx){
+    try {
+      const raw = localStorage.getItem('jsonxml2sql_output_columns');
+      if (!raw) return false;
+      const saved = JSON.parse(raw);
+      const savedCols = Array.isArray(saved?.columns) ? saved.columns : [];
+      const savedTables = Array.isArray(saved?.tables) ? new Set(saved.tables) : new Set();
+      // Filter to current tables and still-selected fields
+      const nextCols = [];
+      const seen = new Set();
+      for (const it of savedCols){
+        if (!it || !it.table || !it.col) continue;
+        if (!ctx || !ctx.tables || !ctx.tables.has(it.table)) continue;
+        const sel = (designerState.selectedFields||{})[it.table];
+        if (!sel || !sel.has(it.col)) continue;
+        const k = it.table + '|' + it.col;
+        if (seen.has(k)) continue;
+        seen.add(k);
+        nextCols.push({ table: it.table, col: it.col });
+      }
+      designerState.output.columns = nextCols;
+      // Included tables = intersection with present tables
+      const included = new Set();
+      for (const t of savedTables){ if (ctx && ctx.tables && ctx.tables.has(t)) included.add(t); }
+      designerState.output.includedTables = included;
+      return true;
+    } catch { return false; }
+  }
+  function addOutputField(tablePath, col){
+    const k = tablePath + '|' + col;
+    const exists = (designerState.output.columns||[]).some(it=> (it.table + '|' + it.col) === k);
+    if (!exists){ designerState.output.columns.push({ table: tablePath, col }); persistOutputState(); }
+  }
+  function normalizeOutputColumns(){
+    try{
+      const next = [];
+      const seen = new Set();
+      for (const it of (designerState.output.columns||[])){
+        if (!it || !it.table || !it.col) continue;
+        const k = it.table + '|' + it.col;
+        if (seen.has(k)) continue;
+        seen.add(k);
+        next.push({ table: it.table, col: it.col });
+      }
+      designerState.output.columns = next;
+    } catch {}
+  }
   // Shared join/base/alias context for use across builder and UI
   function computeSqlCtx(){
     let base = null;
@@ -359,16 +433,21 @@
   }
   function renderOutputList(ctx){
     try {
-      const ul = document.getElementById('outputList'); if (!ul) return;
-      ul.innerHTML = '';
+  let ul = document.getElementById('outputList'); if (!ul) return;
+  const fresh = ul.cloneNode(false);
+  ul.parentNode.replaceChild(fresh, ul);
+  ul = fresh;
       const aliasFor = ctx && ctx.aliasFor ? ctx.aliasFor : ((p)=>p.split('.').pop());
       for (const item of designerState.output.columns){
         // Only render items for tables still present
         if (!ctx || !ctx.tables || !ctx.tables.has(item.table)) continue;
         const li = document.createElement('li');
         li.dataset.table = item.table; li.dataset.col = item.col;
-        const h = document.createElement('span'); h.className = 'output-handle'; h.title = 'Drag to reorder';
-        const label = document.createElement('span'); label.textContent = `${aliasFor(item.table)}.${item.col}`;
+  const h = document.createElement('span'); h.className = 'output-handle'; h.title = 'Drag to reorder';
+  const label = document.createElement('span');
+  const full = `${aliasFor(item.table)}.${item.col}`;
+  label.textContent = full;
+  li.title = full;
         li.appendChild(h); li.appendChild(label);
         ul.appendChild(li);
       }
@@ -399,8 +478,11 @@
         }
         makeTableDraggable(card, head, key);
       }
-      const ul = card.querySelector('#outputDtList'); if (!ul) return;
-      ul.innerHTML='';
+  let ul = card.querySelector('#outputDtList'); if (!ul) return;
+  // Replace with a fresh node to drop old listeners and state
+  const fresh = ul.cloneNode(false);
+  ul.parentNode.replaceChild(fresh, ul);
+  ul = fresh;
       for (const item of designerState.output.columns){
         // keep only fields from still-present tables and still-selected
         if (!ctx || !ctx.tables || !ctx.tables.has(item.table)) continue;
@@ -409,44 +491,101 @@
         const li = document.createElement('li'); li.dataset.table=item.table; li.dataset.col=item.col;
         const h = document.createElement('span'); h.className='dt-handle'; h.title='Drag to reorder';
         const label = document.createElement('span'); label.className='designer-field';
-        label.textContent = `${tableDisplayName(item.table)}.${item.col}`;
+        const fullName = `${tableDisplayName(item.table)}.${item.col}`;
+        label.textContent = fullName;
+        li.title = fullName;
         li.appendChild(h); li.appendChild(label);
         ul.appendChild(li);
       }
-      enableOutputCardReorder(ul);
+  enableOutputCardReorder(ul);
     } catch {}
   }
   function enableOutputCardReorder(ulEl){
-    let draggingEl=null, startY=0, placeholder=null;
-    const onDown=(e)=>{
-      const handle = e.target.closest('.dt-handle'); if (!handle) return;
-      draggingEl = handle.closest('li'); startY=e.clientY; draggingEl.classList.add('dragging');
-      placeholder=document.createElement('li'); placeholder.style.height=draggingEl.getBoundingClientRect().height+'px'; placeholder.className='dt-placeholder';
-      draggingEl.parentNode.insertBefore(placeholder, draggingEl.nextSibling);
-      document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp); e.preventDefault();
+  if (ulEl.__dndBound) return; // avoid duplicate bindings
+  ulEl.__dndBound = true;
+  // Clean any stray placeholders
+  try { ulEl.querySelectorAll('.dt-placeholder').forEach(n=>n.remove()); } catch {}
+    let draggingEl=null, startY=0, placeholder=null, isDragging=false, pending=false;
+    const threshold=4;
+    const startDrag=()=>{
+      if (isDragging || !draggingEl) return;
+      isDragging = true;
+      draggingEl.classList.add('dragging');
+      // Only create one placeholder
+      placeholder = ulEl.querySelector('li.dt-placeholder') || document.createElement('li');
+      if (!placeholder.classList.contains('dt-placeholder')){
+        placeholder.style.height=draggingEl.getBoundingClientRect().height+'px';
+        placeholder.className='dt-placeholder';
+        draggingEl.parentNode.insertBefore(placeholder, draggingEl.nextSibling);
+      }
     };
-    const onMove=(e)=>{ if (!draggingEl) return; const dy=e.clientY-startY; draggingEl.style.transform=`translateY(${dy}px)`; const siblings=Array.from(ulEl.querySelectorAll('li:not(.dragging)')); for (const sib of siblings){ const rect=sib.getBoundingClientRect(); if (e.clientY < rect.top + rect.height/2){ ulEl.insertBefore(placeholder, sib); break; } if (sib===siblings[siblings.length-1]) ulEl.appendChild(placeholder);} };
-  const onUp=()=>{ if (!draggingEl) return; draggingEl.classList.remove('dragging'); draggingEl.style.transform=''; ulEl.insertBefore(draggingEl, placeholder); placeholder.remove(); placeholder=null; document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); const next=Array.from(ulEl.querySelectorAll('li')).map(li=>({table:li.dataset.table, col:li.dataset.col})); designerState.output.columns=next; syncSqlFromDesigner(); };
+    const onDown=(e)=>{
+      if (e.button!==0) return; // left click only
+      const li = e.target.closest('li'); if (!li) return;
+      draggingEl = li; startY=e.clientY; pending=true; isDragging=false; placeholder=null;
+      document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
+    };
+    const onMove=(e)=>{
+      if (!draggingEl) return;
+      const dy=e.clientY-startY;
+      if (!isDragging){ if (!pending || Math.abs(dy) < threshold) return; startDrag(); }
+      draggingEl.style.transform=`translateY(${dy}px)`;
+      const siblings=Array.from(ulEl.querySelectorAll('li:not(.dragging)'));
+      for (const sib of siblings){
+        const rect=sib.getBoundingClientRect();
+        if (e.clientY < rect.top + rect.height/2){ ulEl.insertBefore(placeholder, sib); break; }
+        if (sib===siblings[siblings.length-1]) ulEl.appendChild(placeholder);
+      }
+    };
+    const cleanup=()=>{
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      draggingEl=null; startY=0; pending=false; isDragging=false; placeholder=null;
+    };
+    const onUp=()=>{
+      if (!draggingEl){ cleanup(); return; }
+      if (!isDragging){ // click without dragging
+        cleanup(); return;
+      }
+      draggingEl.classList.remove('dragging'); draggingEl.style.transform='';
+      if (placeholder){ ulEl.insertBefore(draggingEl, placeholder); placeholder.remove(); }
+      const next=Array.from(ulEl.querySelectorAll('li')).map(li=>({table:li.dataset.table, col:li.dataset.col}));
+      designerState.output.columns=next; normalizeOutputColumns();
+      try{ persistOutputState(); }catch{}
+      syncSqlFromDesigner();
+      cleanup();
+    };
     ulEl.addEventListener('mousedown', onDown);
   }
   function enableOutputReorder(ulEl){
-    let draggingEl=null, startY=0, placeholder=null;
-    const onDown=(e)=>{
-      const handle = e.target.closest('.output-handle');
-      if (!handle) return;
-      draggingEl = handle.closest('li'); startY = e.clientY;
+  if (ulEl.__dndBound) return; // avoid duplicate bindings
+  ulEl.__dndBound = true;
+  try { ulEl.querySelectorAll('.dt-placeholder').forEach(n=>n.remove()); } catch {}
+    let draggingEl=null, startY=0, placeholder=null, isDragging=false, pending=false;
+    const threshold=4;
+    const startDrag=()=>{
+      if (isDragging || !draggingEl) return;
+      isDragging = true;
       draggingEl.classList.add('dragging');
-      placeholder = document.createElement('li');
-      placeholder.style.height = draggingEl.getBoundingClientRect().height + 'px';
-      placeholder.className = 'dt-placeholder';
-      draggingEl.parentNode.insertBefore(placeholder, draggingEl.nextSibling);
+      placeholder = ulEl.querySelector('li.dt-placeholder') || document.createElement('li');
+      if (!placeholder.classList.contains('dt-placeholder')){
+        placeholder.style.height = draggingEl.getBoundingClientRect().height + 'px';
+        placeholder.className = 'dt-placeholder';
+        draggingEl.parentNode.insertBefore(placeholder, draggingEl.nextSibling);
+      }
+    };
+    const onDown=(e)=>{
+      if (e.button!==0) return;
+      const li = e.target.closest('li');
+      if (!li) return;
+      draggingEl = li; startY = e.clientY; pending=true; isDragging=false; placeholder=null;
       document.addEventListener('mousemove', onMove);
       document.addEventListener('mouseup', onUp);
-      e.preventDefault();
     };
     const onMove=(e)=>{
       if (!draggingEl) return;
       const dy = e.clientY - startY;
+      if (!isDragging){ if (!pending || Math.abs(dy) < threshold) return; startDrag(); }
       draggingEl.style.transform = `translateY(${dy}px)`;
       const siblings = Array.from(ulEl.querySelectorAll('li:not(.dragging)'));
       for (const sib of siblings){
@@ -455,40 +594,74 @@
         if (sib === siblings[siblings.length-1]) ulEl.appendChild(placeholder);
       }
     };
-    const onUp=()=>{
-      if (!draggingEl) return;
-      draggingEl.classList.remove('dragging'); draggingEl.style.transform='';
-      ulEl.insertBefore(draggingEl, placeholder);
-      placeholder.remove(); placeholder=null;
+    const cleanup=()=>{
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
+      draggingEl=null; startY=0; pending=false; isDragging=false; placeholder=null;
+    };
+    const onUp=()=>{
+      if (!draggingEl){ cleanup(); return; }
+      if (!isDragging){ cleanup(); return; }
+      draggingEl.classList.remove('dragging'); draggingEl.style.transform='';
+      if (placeholder){ ulEl.insertBefore(draggingEl, placeholder); placeholder.remove(); }
       // Persist the new output order in memory
       const next = Array.from(ulEl.querySelectorAll('li')).map(li=>({ table: li.dataset.table, col: li.dataset.col }));
       designerState.output.columns = next;
+      normalizeOutputColumns();
+      try{ persistOutputState(); }catch{}
       syncSqlFromDesigner();
+      cleanup();
     };
     ulEl.addEventListener('mousedown', onDown);
   }
   function addOutputTable(tablePath){
-    try{ const set = getSelectedSet(tablePath); if (!set || set.size===0) return; const order = loadFieldOrder(tablePath, Array.from(set)); for (const c of order){ if (set.has(c)) designerState.output.columns.push({ table: tablePath, col: c }); } designerState.output.includedTables.add(tablePath);} catch {}
+    try{
+      const set = getSelectedSet(tablePath); if (!set || set.size===0) return;
+      const order = loadFieldOrder(tablePath, Array.from(set));
+      const seen = new Set((designerState.output.columns||[]).map(it=>it.table+'|'+it.col));
+      for (const c of order){
+        if (!set.has(c)) continue;
+        const k = tablePath + '|' + c;
+        if (seen.has(k)) continue;
+        designerState.output.columns.push({ table: tablePath, col: c });
+        seen.add(k);
+      }
+      designerState.output.includedTables.add(tablePath);
+  normalizeOutputColumns();
+      persistOutputState();
+    } catch {}
   }
   function removeOutputTable(tablePath){
-    try{ designerState.output.columns = designerState.output.columns.filter(it=>it.table!==tablePath); designerState.output.includedTables.delete(tablePath);} catch {}
+    try{ designerState.output.columns = designerState.output.columns.filter(it=>it.table!==tablePath); designerState.output.includedTables.delete(tablePath); persistOutputState(); } catch {}
   }
   function ensureOutputInitialized(ctx){
     if (!designerState.output.active){
       designerState.output.active = true;
       designerState.output.columns = [];
       designerState.output.includedTables = new Set();
-      // Default columns = all selected fields from present tables in their per-table order
-      if (ctx && ctx.tables){
-        for (const path of ctx.tables.keys()){
-          const set = (designerState.selectedFields||{})[path];
-          if (!set || set.size===0) continue;
-          const order = loadFieldOrder(path, Array.from(set));
-          for (const c of order){ if (set.has(c)) designerState.output.columns.push({ table: path, col: c }); }
-          designerState.output.includedTables.add(path);
+      // Try to restore persisted ordering first
+      const restored = loadPersistedOutputState(ctx);
+      if (!restored){
+        // Default columns = all selected fields from present tables in their per-table order (deduped)
+        const nextCols = [];
+        const seen = new Set();
+        if (ctx && ctx.tables){
+          for (const path of ctx.tables.keys()){
+            const set = (designerState.selectedFields||{})[path];
+            if (!set || set.size===0) continue;
+            const order = loadFieldOrder(path, Array.from(set));
+            for (const c of order){
+              if (!set.has(c)) continue;
+              const k = path + '|' + c;
+              if (seen.has(k)) continue;
+              seen.add(k);
+              nextCols.push({ table: path, col: c });
+            }
+            designerState.output.includedTables.add(path);
+          }
         }
+        designerState.output.columns = nextCols;
+        persistOutputState();
       }
     }
   }
@@ -577,10 +750,10 @@
           // Keep output card aligned with current selections
           if (designerState.output && designerState.output.active){
             if (check.checked){
-              const exists = designerState.output.columns.some(it=>it.table===t.name && it.col===c);
-              if (!exists) designerState.output.columns.push({ table: t.name, col: c });
+              try { addOutputField(t.name, c); } catch { /* fallback: no-op */ }
             } else {
               designerState.output.columns = designerState.output.columns.filter(it=> !(it.table===t.name && it.col===c));
+              try { persistOutputState(); } catch {}
             }
             renderOutputCard(computeSqlCtx());
           }
@@ -593,7 +766,12 @@
         const pinRight = document.createElement('span'); pinRight.className='designer-field-pin pin-right'; pinRight.title='Drag to link';
         pinRight.dataset.table = t.name; pinRight.dataset.col = c; pinRight.dataset.side = 'right';
         pinRight.addEventListener('mousedown', (e)=>startLinkDrag(e, pinRight));
-        li.appendChild(handle); li.appendChild(check); li.appendChild(pinLeft); li.appendChild(label); li.appendChild(pinRight);
+  // Order: handle, left pin, checkbox, label, right pin
+  li.appendChild(handle);
+  li.appendChild(pinLeft);
+  li.appendChild(check);
+  li.appendChild(label);
+  li.appendChild(pinRight);
         ul.appendChild(li);
       }
   body.appendChild(ul); card.appendChild(body);
@@ -853,7 +1031,14 @@
         if (hasJoins){
           // If output panel is active and has an explicit order, use that
           if (designerState.output && designerState.output.active && Array.isArray(designerState.output.columns) && designerState.output.columns.length){
-            for (const item of designerState.output.columns){ if (tables.has(item.table)) selectedList.push(`${aliasFor(item.table)}.${item.col}`); }
+            const seenSel = new Set();
+            for (const item of designerState.output.columns){
+              if (!tables.has(item.table)) continue;
+              const expr = `${aliasFor(item.table)}.${item.col}`;
+              if (seenSel.has(expr)) continue;
+              seenSel.add(expr);
+              selectedList.push(expr);
+            }
           } else {
             for (const [path, set] of Object.entries(designerState.selectedFields || {})){
               if (!tables.has(path)) continue;
@@ -886,7 +1071,8 @@
       const sql = buildSqlFromDesigner();
       if (monacoEditor){ monacoEditor.setValue(sql); }
       computeAndRun(sql);
-      updateOutputPreview(sql);
+  updateOutputPreview(sql);
+  updateDesignerSqlPreview(sql);
     } catch {}
   }
   function initDesignerEvents(){
@@ -940,7 +1126,7 @@
     }
     return list;
   }
-  function initMonaco(){ if (!window.__loadMonaco) return; window.__loadMonaco(function(monaco){ monacoEditor = monaco.editor.create(document.getElementById('sqlMonaco'), { value:'SELECT * FROM data LIMIT 100', language:'sql', automaticLayout:true, fontSize:14, minimap:{enabled:false}, lineNumbers:'on', roundedSelection:false, theme:'vs-dark', wordWrap:'off', scrollBeyondLastLine:false }); monacoEditor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, function(){ document.getElementById('runSqlBtn').click(); }); const keywords=['SELECT','FROM','WHERE','AND','OR','ORDER','BY','ASC','DESC','LIMIT','OFFSET','TRUE','FALSE','NULL','JOIN','LEFT','RIGHT','INNER','FULL','OUTER','ON','AS','GROUP']; monaco.languages.registerCompletionItemProvider('sql',{ provideCompletionItems:()=>{ let fromSource='data'; try{ const txt=monacoEditor.getValue(); const m=txt.match(/\bFROM\s+([A-Za-z0-9_\.]+)/i); if (m && m[1]) fromSource=m[1]; } catch {} const fromOptions=computeFromCandidates(); const fromItems=fromOptions.map(o=>({label:o.label, kind:monaco.languages.CompletionItemKind.Module, insertText:o.label, detail:o.detail })); const baseRows=resolveSourceRows(fromSource); const scopedFields=uniqueKeys(baseRows); const fieldItems=[...new Set(scopedFields).values()].map(f=>({label:f, kind:monaco.languages.CompletionItemKind.Field, insertText:f})); const kwItems=keywords.map(k=>({label:k, kind:monaco.languages.CompletionItemKind.Keyword, insertText:k})); return { suggestions:[...kwItems, ...fromItems, ...fieldItems] }; } }); }); }
+  function initMonaco(){ if (!window.__loadMonaco) return; window.__loadMonaco(function(monaco){ monacoEditor = monaco.editor.create(document.getElementById('sqlMonaco'), { value:'SELECT * FROM data LIMIT 100', language:'sql', automaticLayout:true, fontSize:14, minimap:{enabled:false}, lineNumbers:'on', roundedSelection:false, theme:'vs-dark', wordWrap:'off', scrollBeyondLastLine:false }); monacoEditor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, function(){ document.getElementById('runSqlBtn').click(); }); const keywords=['SELECT','FROM','WHERE','AND','OR','ORDER','BY','ASC','DESC','LIMIT','OFFSET','TRUE','FALSE','NULL','JOIN','LEFT','RIGHT','INNER','FULL','OUTER','ON','AS','GROUP']; monaco.languages.registerCompletionItemProvider('sql',{ provideCompletionItems:()=>{ let fromSource='data'; try{ const txt=monacoEditor.getValue(); const m=txt.match(/\bFROM\s+([A-Za-z0-9_\.]+)/i); if (m && m[1]) fromSource=m[1]; } catch {} const fromOptions=computeFromCandidates(); const fromItems=fromOptions.map(o=>({label:o.label, kind:monaco.languages.CompletionItemKind.Module, insertText:o.label, detail:o.detail })); const baseRows=resolveSourceRows(fromSource); const scopedFields=uniqueKeys(baseRows); const fieldItems=[...new Set(scopedFields).values()].map(f=>({label:f, kind:monaco.languages.CompletionItemKind.Field, insertText:f})); const kwItems=keywords.map(k=>({label:k, kind:monaco.languages.CompletionItemKind.Keyword, insertText:k})); return { suggestions:[...kwItems, ...fromItems, ...fieldItems] }; } }); try{ monacoEditor.onDidChangeModelContent(()=>{ try{ updateDesignerSqlPreview(monacoEditor.getValue()); }catch{} }); }catch{} }); }
 
   // ---- App ----
   function shouldRenderMulti(ast){ try{ const isStar = ast && ast.cols && ast.cols.length===1 && ast.cols[0].kind==='star'; const isRoot = ast && (ast.source==='data' || !ast.source); const okClauses = ast && !ast.where && (!ast.joins || ast.joins.length===0); return Boolean(isStar && isRoot && okClauses); } catch { return false; } }
@@ -1071,7 +1257,16 @@
         for (const key of Object.keys(panels)) panels[key].classList.toggle('active', key===name);
         localStorage.setItem('jsonxml2sql_editor_tab', name);
         if (name==='designer'){
-          try { refreshDesignerVisibility(); renderDesignerTables(); renderDesignerLinks(); initDesignerEvents(); } catch {}
+          try { 
+            refreshDesignerVisibility(); 
+            renderDesignerTables(); 
+            renderDesignerLinks(); 
+            initDesignerEvents(); 
+            const previewWrap = document.getElementById('designerSqlPreview');
+            if (previewWrap) previewWrap.classList.remove('hidden');
+            ensureDesignerSqlPreview();
+            try { if (monacoEditor) updateDesignerSqlPreview(monacoEditor.getValue()); } catch {}
+          } catch {}
         } else if (name==='editor'){
           try { if (monacoEditor) monacoEditor.layout(); } catch {}
         }
