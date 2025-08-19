@@ -166,7 +166,17 @@
       cols.push(parseCol()); while (peek()&&peek().value===','){ eat('op',','); cols.push(parseCol()); }
       eat('kw','FROM'); const source=parseDottedName(); let sourceAlias=null; if (peek()&&peek().type==='kw'&&peek().value==='AS'){ eat('kw','AS'); sourceAlias=eat('ident').value; } else if (peek()&&peek().type==='ident'){ sourceAlias=eat('ident').value; }
       const joins=[]; let where=null, order=null, limit=null, offset=null, groupBy=null;
-      function parseOnRef(){ const id=eat('ident').value; const parts=id.split('.'); if (parts.length<2) throw new Error('Use alias.field'); const alias=parts.shift(); return {alias, path:parts.join('.')}; }
+      function parseOnRef(){
+        // Expect alias '.' name[.more]
+        const alias = eat('ident').value;
+        eat('op','.');
+        let name = eat('ident').value;
+        while (peek() && peek().type==='op' && peek().value==='.'){
+          eat('op','.');
+          name += '.' + eat('ident').value;
+        }
+        return { alias, path: name };
+      }
       while (peek() && peek().type==='kw' && ['JOIN','LEFT','RIGHT','INNER','FULL'].includes(peek().value)){
         let jtype='INNER'; if (peek().value==='LEFT' || peek().value==='RIGHT' || peek().value==='FULL'){ jtype=eat('kw').value; if (peek()&&peek().type==='kw'&&peek().value==='OUTER') eat('kw','OUTER'); eat('kw','JOIN'); } else if (peek().value==='INNER'){ eat('kw','INNER'); eat('kw','JOIN'); } else { eat('kw','JOIN'); }
         const jsource=parseDottedName(); let jalias=null; if (peek()&&peek().type==='kw'&&peek().value==='AS'){ eat('kw','AS'); jalias=eat('ident').value; } else if (peek()&&peek().type==='ident'){ jalias=eat('ident').value; }
@@ -291,10 +301,10 @@
   function prettyFromLabel(){ try{ if(!currentFromSource || currentFromSource==='data') return 'data'; if (currentFromSource.startsWith('data.')) return currentFromSource.slice(5); return currentFromSource; } catch { return 'data'; } }
 
   // ---- Designer (Join UI) ----
-  const designerState = { links: [], dragging: null, tableOrder: [], selectedFields: {} };
+  const designerState = { links: [], dragging: null, tableOrder: [], selectedFields: {}, isFreshLoad: false };
   function getSelectedSet(path){
+    // Load persisted selections from localStorage
     if (!designerState.selectedFields[path]){
-      // Load from localStorage if available
       try {
         const key = 'jsonxml2sql_designer_sel_' + path;
         const raw = localStorage.getItem(key);
@@ -325,10 +335,26 @@
   function tableDisplayName(path){ return (path||'').replace(/^data\./,''); }
   function uniqueScalarKeys(rows){ const keys = new Set(); for (const r of rows||[]){ for (const [k,v] of Object.entries(r||{})){ if (v==null || typeof v!=='object') keys.add(k); } } return Array.from(keys.values()); }
   function getTableRows(path){ const g = collectRootArrays().find(x=>x.name===path); return g? g.rows: []; }
+  function loadFieldOrder(path, cols){
+    try {
+      const raw = localStorage.getItem('jsonxml2sql_dt_order_' + path);
+      if (!raw) return cols;
+      const saved = JSON.parse(raw);
+      if (!Array.isArray(saved) || !saved.length) return cols;
+      const set = new Set(cols);
+      const ordered = saved.filter(c=>set.has(c));
+      const rest = cols.filter(c=>!ordered.includes(c));
+      return [...ordered, ...rest];
+    } catch { return cols; }
+  }
+  function persistFieldOrder(path, cols){
+    try { localStorage.setItem('jsonxml2sql_dt_order_' + path, JSON.stringify(cols)); } catch {}
+  }
   function renderDesignerTables(){
     const host = document.getElementById('designerTables'); if (!host) return;
     const tables = collectRootArrays();
-  host.innerHTML = ''; designerState.tableOrder = tables.map(t=>t.name);
+  host.innerHTML = '';
+  designerState.tableOrder = tables.map(t=>t.name);
     for (const t of tables){
       const card = document.createElement('div'); card.className='designer-table'; card.dataset.path = t.name;
   const head = document.createElement('div'); head.className='dt-head';
@@ -337,17 +363,25 @@
       card.appendChild(head);
       const body = document.createElement('div'); body.className='dt-body';
       const ul = document.createElement('ul'); ul.className='dt-fields';
-      const cols = uniqueScalarKeys(t.rows);
+      let cols = uniqueScalarKeys(t.rows);
+      cols = loadFieldOrder(t.name, cols);
       const selSet = getSelectedSet(t.name);
       for (const c of cols){
         const li = document.createElement('li');
+        li.dataset.col = c;
+        // Row drag handle
+        const handle = document.createElement('span');
+        handle.className = 'dt-handle';
+        handle.title = 'Drag to reorder';
         // Big checkbox to include field in SELECT list
         const check = document.createElement('input');
         check.type = 'checkbox';
         check.className = 'designer-field-check';
         check.title = 'Include in SELECT';
-        check.checked = selSet.has(c);
+        // Show unchecked on first load of new data; otherwise reflect persisted selections
+        check.checked = (!designerState.isFreshLoad) && selSet.has(c);
         check.addEventListener('change', ()=>{
+          designerState.isFreshLoad = false;
           if (check.checked) selSet.add(c); else selSet.delete(c);
           persistSelectedSet(t.name);
           syncSqlFromDesigner();
@@ -359,10 +393,12 @@
         const pinRight = document.createElement('span'); pinRight.className='designer-field-pin pin-right'; pinRight.title='Drag to link';
         pinRight.dataset.table = t.name; pinRight.dataset.col = c; pinRight.dataset.side = 'right';
         pinRight.addEventListener('mousedown', (e)=>startLinkDrag(e, pinRight));
-        li.appendChild(check); li.appendChild(pinLeft); li.appendChild(label); li.appendChild(pinRight);
+        li.appendChild(handle); li.appendChild(check); li.appendChild(pinLeft); li.appendChild(label); li.appendChild(pinRight);
         ul.appendChild(li);
       }
-      body.appendChild(ul); card.appendChild(body);
+  body.appendChild(ul); card.appendChild(body);
+  // Enable drag reordering
+  enableRowReorder(ul, t.name);
 
       // Positioning: restore from localStorage or lay out in a horizontal row
       const key = 'jsonxml2sql_dt_pos_' + t.name;
@@ -387,6 +423,55 @@
       host.appendChild(card);
     }
     drawAllLinks();
+  }
+  // In-list drag-and-drop reordering for field rows
+  function enableRowReorder(ulEl, tablePath){
+    let draggingEl = null; let startY=0; let placeholder = null;
+    const rows = Array.from(ulEl.children);
+    const onDown = (e)=>{
+      const handle = e.target.closest('.dt-handle');
+      if (!handle) return;
+      const li = handle.closest('li');
+      draggingEl = li; startY = e.clientY;
+      li.classList.add('dragging');
+      placeholder = document.createElement('li');
+      placeholder.style.height = li.getBoundingClientRect().height + 'px';
+      placeholder.className = 'dt-placeholder';
+      li.parentNode.insertBefore(placeholder, li.nextSibling);
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+      e.preventDefault();
+    };
+    const onMove = (e)=>{
+      if (!draggingEl) return;
+      const dy = e.clientY - startY;
+      draggingEl.style.transform = `translateY(${dy}px)`;
+      // Determine new position relative to siblings
+      const siblings = Array.from(ulEl.querySelectorAll('li:not(.dragging)'));
+      for (const sib of siblings){
+        const rect = sib.getBoundingClientRect();
+        if (e.clientY < rect.top + rect.height/2){
+          ulEl.insertBefore(placeholder, sib);
+          break;
+        }
+        if (sib === siblings[siblings.length-1]){
+          ulEl.appendChild(placeholder);
+        }
+      }
+    };
+    const onUp = ()=>{
+      if (!draggingEl) return;
+      draggingEl.classList.remove('dragging');
+      draggingEl.style.transform = '';
+      ulEl.insertBefore(draggingEl, placeholder);
+      placeholder.remove(); placeholder = null;
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      // Persist order
+      const cols = Array.from(ulEl.querySelectorAll('li')).map(li=>li.dataset.col).filter(Boolean);
+      persistFieldOrder(tablePath, cols);
+    };
+    ulEl.addEventListener('mousedown', onDown);
   }
   // Dragging per-table with persistent positions
   function makeTableDraggable(card, dragHandle, storageKey){
@@ -517,7 +602,12 @@
   function removeDesignerLink(idx){ designerState.links.splice(idx,1); renderDesignerLinks(); drawAllLinks(); syncSqlFromDesigner(); }
   function renderDesignerLinks(){
     const host=document.getElementById('designerLinks'); if (!host) return; host.innerHTML='';
-    if (!designerState.links.length){ host.innerHTML='<div class="muted">No links added.</div>'; return; }
+    const hasAnySelected = Object.values(designerState.selectedFields||{}).some(set=> set && (set.size||0) > 0);
+    if (!designerState.links.length){
+      // Only show the empty message if nothing is selected either
+      if (!hasAnySelected) host.innerHTML='<div class="muted">No links added.</div>';
+      return;
+    }
     designerState.links.forEach((lnk, i)=>{
       const div=document.createElement('div'); div.className='designer-link-item';
       const leftTxt=`${tableDisplayName(lnk.leftTable)}.${lnk.leftCol}`;
@@ -546,33 +636,58 @@
   function buildSqlFromDesigner(){
     // Choose base as the first table present in links, or the first discovered table
     let base = null;
-    if (designerState.links.length){ base = designerState.links[0].leftTable; }
+    if (designerState.links.length){
+      base = designerState.links[0].leftTable;
+    }
+    // If no links, prefer the single table that has selected fields
+    const selectedTables = Object.entries(designerState.selectedFields||{})
+      .filter(([_, set])=> set && (set.size||0) > 0)
+      .map(([path])=> path);
     const allTables = collectRootArrays().map(t=>t.name);
-    if (!base) base = allTables[0] || 'data';
+    if (!base){
+      base = (selectedTables.length === 1 ? selectedTables[0] : (allTables[0] || 'data'));
+    }
+    const hasJoins = designerState.links.length > 0;
     const tables = new Map();
     const aliasSeq = 'abcdefghijklmnopqrstuvwxyz';
     function aliasFor(path){ if (!tables.has(path)){ const a = aliasSeq[tables.size]; tables.set(path, a); } return tables.get(path); }
-    aliasFor(base); for (const l of designerState.links){ aliasFor(l.leftTable); aliasFor(l.rightTable); }
-    const baseAlias = aliasFor(base);
+    if (hasJoins){ aliasFor(base); for (const l of designerState.links){ aliasFor(l.leftTable); aliasFor(l.rightTable); } }
+    const baseAlias = hasJoins ? aliasFor(base) : null;
     const joinClauses = designerState.links.map(l=>{
       // Always use INNER JOIN as requested
       const jt = 'INNER JOIN';
       const la = aliasFor(l.leftTable), ra = aliasFor(l.rightTable);
-      return `${jt} ${l.rightTable} ${ra} ON ${la}.${l.leftCol} = ${ra}.${l.rightCol}`;
+      return `${jt} ${l.rightTable} AS ${ra} ON ${la}.${l.leftCol} = ${ra}.${l.rightCol}`;
     }).join(' ');
     // Build SELECT list from selected fields if any are chosen for tables that are part of the query
     const selectedList = [];
     try {
-      for (const [path, set] of Object.entries(designerState.selectedFields || {})){
-        if (!tables.has(path)) continue; // only include fields from tables that are part of the FROM/JOINs
-        const a = tables.get(path);
-        if (!set || (set.size||0)===0) continue;
-        // Ensure deterministic order
-        Array.from(set).sort().forEach(col=> selectedList.push(`${a}.${col}`));
+      if (!designerState.isFreshLoad) {
+        if (hasJoins){
+          for (const [path, set] of Object.entries(designerState.selectedFields || {})){
+            if (!tables.has(path)) continue; // only include fields from tables that are part of the FROM/JOINs
+            const a = tables.get(path);
+            if (!set || (set.size||0)===0) continue;
+            // Order follows persisted field order
+            const order = loadFieldOrder(path, Array.from(set));
+            order.forEach(col=> { if (set.has(col)) selectedList.push(`${a}.${col}`); });
+          }
+        } else {
+          // Single-table mode: include only fields from base, without alias prefix
+          const set = (designerState.selectedFields || {})[base];
+          if (set && (set.size||0)>0){
+            const order = loadFieldOrder(base, Array.from(set));
+            order.forEach(col=> { if (set.has(col)) selectedList.push(col); });
+          }
+        }
       }
     } catch {}
     const selectClause = selectedList.length ? selectedList.join(', ') : '*';
-    return `SELECT ${selectClause} FROM ${base} ${baseAlias} ${joinClauses}`.trim();
+    if (hasJoins){
+      return `SELECT ${selectClause} FROM ${base} AS ${baseAlias} ${joinClauses}`.trim();
+    } else {
+      return `SELECT ${selectClause} FROM ${base}`.trim();
+    }
   }
   function syncSqlFromDesigner(){
     try {
@@ -638,7 +753,9 @@
     if (!parsed && (parseMode==='xml' || parseMode==='auto')){ const x=xmlToJson(text); if (x){ parsed=x; source='xml'; } }
     if (!parsed) throw new Error('Input is neither valid JSON nor valid XML');
     const rows=flatten(parsed);
-    loadedRows=rows; loadedMeta.source=source; loadedRoot=parsed; currentFromSource='data';
+  loadedRows=rows; loadedMeta.source=source; loadedRoot=parsed; currentFromSource='data';
+  // Mark as fresh load so Designer does not pre-select persisted fields until user interacts
+  designerState.isFreshLoad = true;
     window.loadedRows=loadedRows; window.loadedRoot=loadedRoot; window.currentFromSource=currentFromSource;
     const rc=document.getElementById('rowCount'); if (rc) rc.textContent = rows.length + ' rows';
     renderPreview(parsed);
