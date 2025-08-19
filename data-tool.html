@@ -57,6 +57,25 @@
 					<div id="sqlStatus" class="status-row muted"></div>
 				</div>
 				<div class="tab-panel" id="panel-designer">
+					<!-- Read-only SQL preview editor for output columns order -->
+					<div id="designerSqlPreview" class="designer-sql-preview hidden" aria-label="SQL preview for output columns">
+						<div id="sqlPreviewMonaco" class="monaco-wrap" aria-label="Read-only SQL preview"></div>
+					</div>
+					<!-- Output columns manager (visible when two or more tables are linked) -->
+					<div id="outputColumns" class="output-columns hidden">
+						<div class="oc-header">
+							<h3>Output columns</h3>
+							<div class="oc-actions">
+								<label class="muted" for="ocRemoveTableSelect">Remove table:</label>
+								<select id="ocRemoveTableSelect"></select>
+								<button id="ocRemoveTableBtn" class="btn">Remove</button>
+								<label class="muted" for="ocAddTableSelect">Add table:</label>
+								<select id="ocAddTableSelect"></select>
+								<button id="ocAddTableBtn" class="btn">Add</button>
+							</div>
+						</div>
+						<ul id="outputColumnsList" class="oc-list" aria-label="Selected columns list"></ul>
+					</div>
 					<div id="designer" class="designer" aria-label="Join designer">
 						<div id="designerEmptyHint" class="muted designer-empty">Designer needs 2 or more tables. Load JSON/XML with multiple arrays under <code>data.*</code>.</div>
 						<div class="designer-toolbar">
@@ -68,7 +87,25 @@
 								<option value="FULL">FULL</option>
 							</select>
 							<button id="designerClearLinks" class="btn">Clear links</button>
+							<button id="designerAddOutput" class="btn">Add Output</button>
 							<button id="designerGenerateSql" class="btn primary">Generate SQL</button>
+						</div>
+						<!-- Output area (hidden until Add Output is clicked) -->
+						<div id="designerOutputPanel" class="designer-output" style="display:none;">
+							<div class="output-toolbar">
+								<strong class="muted">Output fields</strong>
+								<div class="spacer"></div>
+								<label class="muted" for="designerOutputRemoveSel">Remove table:</label>
+								<select id="designerOutputRemoveSel"></select>
+								<button id="designerOutputRemoveBtn" class="btn">Remove</button>
+								<label class="muted" for="designerOutputAddSel">Add table:</label>
+								<select id="designerOutputAddSel"></select>
+								<button id="designerOutputAddBtn" class="btn">Add</button>
+							</div>
+							<div class="output-body">
+								<div id="outputMonaco" class="monaco-wrap" aria-label="Output preview (read-only)"></div>
+								<ul id="outputList" class="output-list" aria-label="Reorder output columns"></ul>
+							</div>
 						</div>
 						<div id="designerCanvas" class="designer-canvas">
 							<svg id="designerSvg" class="designer-svg" aria-hidden="true"></svg>

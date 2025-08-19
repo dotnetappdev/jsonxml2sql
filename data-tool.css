@@ -420,5 +420,32 @@ tbody tr:nth-child(odd) { background: var(--row-alt); }
 .designer-empty { display: none; }
 .designer-empty.show { display: block; }
 
+/* Output panel */
+.designer-output { display: none; border: 1px solid var(--border); border-radius: 8px; padding: 8px; background: var(--panel); margin-bottom: 8px; }
+.designer-output.show { display: block; }
+.designer-output .output-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.designer-output .output-toolbar .spacer { flex: 1 1 auto; }
+.designer-output .output-body { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: start; }
+.output-list { list-style: none; margin: 0; padding: 0; border: 1px dashed var(--border); border-radius: 8px; min-height: 120px; background: var(--bg); }
+.output-list li { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+.output-list li:last-child { border-bottom: none; }
+.output-handle { width: 14px; height: 18px; cursor: grab; position: relative; opacity: 0.8; }
+.output-handle::before { content: ''; position: absolute; inset: 3px 2px; background-image: radial-gradient(currentColor 1px, transparent 1px); background-size: 4px 4px; color: var(--muted); opacity: 0.8; }
+.output-remove { margin-left: auto; }
+
+/* Output columns manager & SQL preview above designer */
+.designer-sql-preview { margin-bottom: 8px; }
+.designer-sql-preview .monaco-wrap { height: 120px; }
+.output-columns { border: 1px solid var(--border); border-radius: 8px; padding: 8px; margin-bottom: 10px; background: var(--panel); }
+.output-columns.hidden, .designer-sql-preview.hidden { display: none; }
+.oc-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.oc-actions { display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.oc-list { list-style: none; margin: 0; padding: 0; border: 1px dashed var(--border); border-radius: 6px; }
+.oc-list li { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-bottom: 1px dashed var(--border); }
+.oc-list li:last-child { border-bottom: none; }
+.oc-handle { width: 14px; height: 18px; cursor: grab; position: relative; opacity: 0.8; }
+.oc-handle::before { content: ''; position: absolute; inset: 3px 2px; background-image: radial-gradient(currentColor 1px, transparent 1px); background-size: 4px 4px; background-position: 0 0; color: var(--muted); opacity: 0.8; }
+.oc-alias { color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+
 
 
