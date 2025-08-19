@@ -290,6 +290,308 @@
   function renderTreeGroups(groups){ const root=document.getElementById('resultsTree'); if(!root) return; root.innerHTML=''; function node(key,value,parent=''){ const li=document.createElement('li'); const caret=document.createElement('span'); caret.className='caret'; caret.tabIndex=0; const label=document.createElement('span'); label.className='key'; label.textContent=key; li.appendChild(caret); li.appendChild(label); const type = value===null? 'null' : Array.isArray(value)? 'array' : typeof value; const t=document.createElement('span'); t.className='type'; t.textContent=`: ${type}`; li.appendChild(t); if (type==='object' || type==='array'){ const ul=document.createElement('ul'); const entries = Array.isArray(value) ? value.map((v,i)=>[`${parent||key}[${i}]`, v]) : Object.entries(value); for (const [k,v] of entries) ul.appendChild(node(k,v,key)); li.appendChild(ul); li.classList.add('has-children'); const toggle=()=>li.classList.toggle('collapsed'); caret.addEventListener('click', toggle); caret.addEventListener('keydown', (e)=>{ if (e.key==='Enter' || e.key===' '){ e.preventDefault(); toggle(); } }); } else { const vv=document.createElement('span'); vv.textContent = ` = ${String(value)}`; li.appendChild(vv); } return li; } const ul=document.createElement('ul'); for (const g of groups){ const name=(g.name||'').replace(/^data\./,''); ul.appendChild(node(name, g.rows)); } root.appendChild(ul); }
   function prettyFromLabel(){ try{ if(!currentFromSource || currentFromSource==='data') return 'data'; if (currentFromSource.startsWith('data.')) return currentFromSource.slice(5); return currentFromSource; } catch { return 'data'; } }
 
+  // ---- Designer (Join UI) ----
+  const designerState = { links: [], dragging: null, tableOrder: [], selectedFields: {} };
+  function getSelectedSet(path){
+    if (!designerState.selectedFields[path]){
+      // Load from localStorage if available
+      try {
+        const key = 'jsonxml2sql_designer_sel_' + path;
+        const raw = localStorage.getItem(key);
+        const arr = raw ? JSON.parse(raw) : [];
+        designerState.selectedFields[path] = new Set(Array.isArray(arr) ? arr : []);
+      } catch {
+        designerState.selectedFields[path] = new Set();
+      }
+    }
+    return designerState.selectedFields[path];
+  }
+  function persistSelectedSet(path){
+    try {
+      const key = 'jsonxml2sql_designer_sel_' + path;
+      const set = designerState.selectedFields[path] || new Set();
+      localStorage.setItem(key, JSON.stringify(Array.from(set)));
+    } catch {}
+  }
+  function refreshDesignerVisibility(){
+    const hint = document.getElementById('designerEmptyHint');
+    const wrap = document.getElementById('designer');
+    const tables = collectRootArrays();
+    if (!wrap) return;
+    const multi = tables.length >= 2;
+    if (hint) hint.classList.toggle('show', !multi);
+    wrap.classList.toggle('disabled', !multi);
+  }
+  function tableDisplayName(path){ return (path||'').replace(/^data\./,''); }
+  function uniqueScalarKeys(rows){ const keys = new Set(); for (const r of rows||[]){ for (const [k,v] of Object.entries(r||{})){ if (v==null || typeof v!=='object') keys.add(k); } } return Array.from(keys.values()); }
+  function getTableRows(path){ const g = collectRootArrays().find(x=>x.name===path); return g? g.rows: []; }
+  function renderDesignerTables(){
+    const host = document.getElementById('designerTables'); if (!host) return;
+    const tables = collectRootArrays();
+  host.innerHTML = ''; designerState.tableOrder = tables.map(t=>t.name);
+    for (const t of tables){
+      const card = document.createElement('div'); card.className='designer-table'; card.dataset.path = t.name;
+  const head = document.createElement('div'); head.className='dt-head';
+      const title = document.createElement('div'); title.className='dt-title'; title.textContent = tableDisplayName(t.name);
+      head.appendChild(title);
+      card.appendChild(head);
+      const body = document.createElement('div'); body.className='dt-body';
+      const ul = document.createElement('ul'); ul.className='dt-fields';
+      const cols = uniqueScalarKeys(t.rows);
+      const selSet = getSelectedSet(t.name);
+      for (const c of cols){
+        const li = document.createElement('li');
+        // Big checkbox to include field in SELECT list
+        const check = document.createElement('input');
+        check.type = 'checkbox';
+        check.className = 'designer-field-check';
+        check.title = 'Include in SELECT';
+        check.checked = selSet.has(c);
+        check.addEventListener('change', ()=>{
+          if (check.checked) selSet.add(c); else selSet.delete(c);
+          persistSelectedSet(t.name);
+          syncSqlFromDesigner();
+        });
+        const pinLeft = document.createElement('span'); pinLeft.className='designer-field-pin pin-left'; pinLeft.title='Drag to link';
+        pinLeft.dataset.table = t.name; pinLeft.dataset.col = c; pinLeft.dataset.side = 'left';
+        pinLeft.addEventListener('mousedown', (e)=>startLinkDrag(e, pinLeft));
+        const label = document.createElement('span'); label.className='designer-field'; label.textContent = c;
+        const pinRight = document.createElement('span'); pinRight.className='designer-field-pin pin-right'; pinRight.title='Drag to link';
+        pinRight.dataset.table = t.name; pinRight.dataset.col = c; pinRight.dataset.side = 'right';
+        pinRight.addEventListener('mousedown', (e)=>startLinkDrag(e, pinRight));
+        li.appendChild(check); li.appendChild(pinLeft); li.appendChild(label); li.appendChild(pinRight);
+        ul.appendChild(li);
+      }
+      body.appendChild(ul); card.appendChild(body);
+
+      // Positioning: restore from localStorage or lay out in a horizontal row
+      const key = 'jsonxml2sql_dt_pos_' + t.name;
+      let pos = null; try { const raw = localStorage.getItem(key); if (raw) pos = JSON.parse(raw); } catch {}
+      const index = tables.findIndex(x=>x.name===t.name);
+      const baseX = 20 + index * 320; // 280 width + ~40 gap
+      const baseY = 20 + (index % 2) * 40; // slight stagger
+      const x = Math.max(0, Math.min(baseX, Math.max(0, (document.getElementById('designerCanvas')?.clientWidth||1000) - 300)));
+      const y = Math.max(0, Math.min(baseY, Math.max(0, (document.getElementById('designerCanvas')?.clientHeight||500) - 200)));
+  let left = (pos && Number.isFinite(pos.left)) ? pos.left : x;
+  let top = (pos && Number.isFinite(pos.top)) ? pos.top : y;
+  const cw0 = document.getElementById('designerCanvas')?.clientWidth || 1000;
+  const ch0 = document.getElementById('designerCanvas')?.clientHeight || 500;
+  left = Math.max(0, Math.min(left, Math.max(0, cw0 - 300)));
+  top = Math.max(0, Math.min(top, Math.max(0, ch0 - 120)));
+  card.style.left = left + 'px';
+  card.style.top = top + 'px';
+
+      // Make draggable via header
+      makeTableDraggable(card, head, key);
+
+      host.appendChild(card);
+    }
+    drawAllLinks();
+  }
+  // Dragging per-table with persistent positions
+  function makeTableDraggable(card, dragHandle, storageKey){
+    let dragging = false; let startX=0, startY=0; let origLeft=0, origTop=0;
+    const canvas = document.getElementById('designerCanvas');
+    const clamp = (val, min, max) => Math.max(min, Math.min(max, val));
+    const onMove = (e)=>{
+      if (!dragging) return;
+      const dx = e.clientX - startX; const dy = e.clientY - startY;
+      const cw = canvas?.clientWidth || 0; const ch = canvas?.clientHeight || 0;
+      const newLeft = clamp(origLeft + dx, 0, Math.max(0, cw - card.offsetWidth));
+      const newTop = clamp(origTop + dy, 0, Math.max(0, ch - card.offsetHeight));
+      card.style.left = newLeft + 'px';
+      card.style.top = newTop + 'px';
+      drawAllLinks();
+    };
+    const onUp = ()=>{
+      if (!dragging) return;
+      dragging = false;
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      try { const left = parseInt(card.style.left||'0',10)||0; const top = parseInt(card.style.top||'0',10)||0; localStorage.setItem(storageKey, JSON.stringify({left, top})); } catch {}
+    };
+    dragHandle.addEventListener('mousedown', (e)=>{
+      if (e.button!==0) return;
+      dragging = true;
+      startX = e.clientX; startY = e.clientY;
+      origLeft = parseInt(card.style.left||'0',10)||0;
+      origTop = parseInt(card.style.top||'0',10)||0;
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+      e.preventDefault();
+    });
+  }
+  function svg(){ return document.getElementById('designerSvg'); }
+  function svgPointFromElement(el){
+    const rect = el.getBoundingClientRect();
+    const rootRect = svg().getBoundingClientRect();
+    const x = rect.left - rootRect.left + rect.width/2;
+    const y = rect.top - rootRect.top + rect.height/2;
+    return {x,y};
+  }
+  function cubicPath(p1, p2){
+    const dx = Math.abs(p2.x - p1.x);
+    const cx = Math.max(40, dx * 0.5);
+    const c1x = p1.x + cx; const c1y = p1.y;
+    const c2x = p2.x - cx; const c2y = p2.y;
+    return `M ${p1.x} ${p1.y} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${p2.x} ${p2.y}`;
+  }
+  function drawAllLinks(){
+    const s = svg(); if (!s) return; s.innerHTML='';
+    for (const l of designerState.links){
+      // Choose inside-facing sides based on positions (absolute left) with rect fallback
+      const leftCard = document.querySelector(`.designer-table[data-path="${CSS.escape(l.leftTable)}"]`);
+      const rightCard = document.querySelector(`.designer-table[data-path="${CSS.escape(l.rightTable)}"]`);
+      let aSide = 'right', bSide = 'left';
+      if (leftCard && rightCard){
+        const lx = parseInt(leftCard.style.left||'0',10) || leftCard.getBoundingClientRect().left;
+        const rx = parseInt(rightCard.style.left||'0',10) || rightCard.getBoundingClientRect().left;
+        aSide = lx <= rx ? 'right' : 'left';
+        bSide = lx <= rx ? 'left' : 'right';
+      }
+      const a = findPin(l.leftTable, l.leftCol, aSide) || findPin(l.leftTable, l.leftCol);
+      const b = findPin(l.rightTable, l.rightCol, bSide) || findPin(l.rightTable, l.rightCol);
+      if (!a||!b) continue;
+      const p1=svgPointFromElement(a), p2=svgPointFromElement(b);
+      const glow=document.createElementNS('http://www.w3.org/2000/svg','path');
+      glow.setAttribute('d', cubicPath(p1, p2));
+      glow.classList.add('designer-link-glow'); s.appendChild(glow);
+      const line=document.createElementNS('http://www.w3.org/2000/svg','path');
+      line.setAttribute('d', cubicPath(p1, p2));
+      line.classList.add('designer-link-line'); s.appendChild(line);
+      if (l.fkSide){
+        const badge=document.createElementNS('http://www.w3.org/2000/svg','circle');
+        const q = l.fkSide==='left'? p1 : p2;
+        badge.setAttribute('cx', String(q.x));
+        badge.setAttribute('cy', String(q.y));
+        badge.setAttribute('r', '5');
+        badge.classList.add('designer-link-end'); s.appendChild(badge);
+      }
+    }
+  }
+  function findPin(table, col, preferSide){
+    if (preferSide){
+      const el = document.querySelector(`.designer-field-pin.pin-${CSS.escape(preferSide)}[data-table="${CSS.escape(table)}"][data-col="${CSS.escape(col)}"]`);
+      if (el) return el;
+    }
+    return document.querySelector(`.designer-field-pin[data-table="${CSS.escape(table)}"][data-col="${CSS.escape(col)}"]`);
+  }
+  function startLinkDrag(e, pin){
+    if (e.button!==0) return; // left only
+    const startTable = pin.dataset.table, startCol = pin.dataset.col;
+  const s = svg(); const preview = document.createElementNS('http://www.w3.org/2000/svg','line');
+  preview.classList.add('designer-link-preview'); s.appendChild(preview);
+    const start = svgPointFromElement(pin);
+    // Use a path for preview too
+    preview.remove();
+    const previewPath = document.createElementNS('http://www.w3.org/2000/svg','path');
+    previewPath.classList.add('designer-link-preview'); s.appendChild(previewPath);
+    const update = (clientX, clientY)=>{ const rect=s.getBoundingClientRect(); const p2={ x: clientX - rect.left, y: clientY - rect.top }; previewPath.setAttribute('d', cubicPath(start, p2)); };
+    const move = (ev)=>{ update(ev.clientX, ev.clientY); };
+    const up = (ev)=>{
+      document.removeEventListener('mousemove', move);
+      document.removeEventListener('mouseup', up);
+      previewPath.remove();
+      const target = document.elementFromPoint(ev.clientX, ev.clientY);
+      const endPin = target && (target.closest ? target.closest('.designer-field-pin') : null);
+      if (!endPin) return;
+      const endTable = endPin.dataset.table, endCol = endPin.dataset.col;
+      if (endTable===startTable && endCol===startCol) return;
+  // Determine direction by table order (left->right) and force INNER join
+  const type = 'INNER';
+      const order = designerState.tableOrder || [];
+      const idxA = order.indexOf(startTable), idxB = order.indexOf(endTable);
+      const leftTable = idxA <= idxB ? startTable : endTable;
+      const leftCol = idxA <= idxB ? startCol : endCol;
+      const rightTable = idxA <= idxB ? endTable : startTable;
+      const rightCol = idxA <= idxB ? endCol : startCol;
+  designerState.links.push({ type, leftTable, leftCol, rightTable, rightCol, fkSide: null });
+      renderDesignerLinks();
+      drawAllLinks();
+  syncSqlFromDesigner();
+    };
+    document.addEventListener('mousemove', move);
+    document.addEventListener('mouseup', up);
+    e.preventDefault();
+  }
+  function removeDesignerLink(idx){ designerState.links.splice(idx,1); renderDesignerLinks(); drawAllLinks(); syncSqlFromDesigner(); }
+  function renderDesignerLinks(){
+    const host=document.getElementById('designerLinks'); if (!host) return; host.innerHTML='';
+    if (!designerState.links.length){ host.innerHTML='<div class="muted">No links added.</div>'; return; }
+    designerState.links.forEach((lnk, i)=>{
+      const div=document.createElement('div'); div.className='designer-link-item';
+      const leftTxt=`${tableDisplayName(lnk.leftTable)}.${lnk.leftCol}`;
+      const rightTxt=`${tableDisplayName(lnk.rightTable)}.${lnk.rightCol}`;
+      const label=document.createElement('span'); label.textContent = `${leftTxt} = ${rightTxt}`; div.appendChild(label);
+
+      // Join type selector
+      const joinSel=document.createElement('select'); joinSel.className='lnk-join';
+      for (const opt of ['INNER','LEFT','RIGHT','FULL']){ const o=document.createElement('option'); o.value=opt; o.textContent=opt; joinSel.appendChild(o);} joinSel.value = lnk.type || 'INNER';
+  joinSel.value = 'INNER';
+  joinSel.disabled = true;
+  joinSel.addEventListener('change', ()=>{ lnk.type = 'INNER'; drawAllLinks(); syncSqlFromDesigner(); });
+      div.appendChild(joinSel);
+
+      // FK side selector
+      const fkSel=document.createElement('select'); fkSel.className='lnk-fk';
+      const fkOptions=[{v:'',t:'FK: none'},{v:'left',t:'FK: left side'},{v:'right',t:'FK: right side'}];
+      for (const {v,t} of fkOptions){ const o=document.createElement('option'); o.value=v; o.textContent=t; fkSel.appendChild(o);} fkSel.value = lnk.fkSide || '';
+  fkSel.addEventListener('change', ()=>{ lnk.fkSide = fkSel.value || null; drawAllLinks(); syncSqlFromDesigner(); });
+      div.appendChild(fkSel);
+
+      const btn=document.createElement('button'); btn.className='btn'; btn.textContent='Remove'; btn.addEventListener('click', ()=>removeDesignerLink(i)); div.appendChild(btn);
+      host.appendChild(div);
+    });
+  }
+  function buildSqlFromDesigner(){
+    // Choose base as the first table present in links, or the first discovered table
+    let base = null;
+    if (designerState.links.length){ base = designerState.links[0].leftTable; }
+    const allTables = collectRootArrays().map(t=>t.name);
+    if (!base) base = allTables[0] || 'data';
+    const tables = new Map();
+    const aliasSeq = 'abcdefghijklmnopqrstuvwxyz';
+    function aliasFor(path){ if (!tables.has(path)){ const a = aliasSeq[tables.size]; tables.set(path, a); } return tables.get(path); }
+    aliasFor(base); for (const l of designerState.links){ aliasFor(l.leftTable); aliasFor(l.rightTable); }
+    const baseAlias = aliasFor(base);
+    const joinClauses = designerState.links.map(l=>{
+      // Always use INNER JOIN as requested
+      const jt = 'INNER JOIN';
+      const la = aliasFor(l.leftTable), ra = aliasFor(l.rightTable);
+      return `${jt} ${l.rightTable} ${ra} ON ${la}.${l.leftCol} = ${ra}.${l.rightCol}`;
+    }).join(' ');
+    // Build SELECT list from selected fields if any are chosen for tables that are part of the query
+    const selectedList = [];
+    try {
+      for (const [path, set] of Object.entries(designerState.selectedFields || {})){
+        if (!tables.has(path)) continue; // only include fields from tables that are part of the FROM/JOINs
+        const a = tables.get(path);
+        if (!set || (set.size||0)===0) continue;
+        // Ensure deterministic order
+        Array.from(set).sort().forEach(col=> selectedList.push(`${a}.${col}`));
+      }
+    } catch {}
+    const selectClause = selectedList.length ? selectedList.join(', ') : '*';
+    return `SELECT ${selectClause} FROM ${base} ${baseAlias} ${joinClauses}`.trim();
+  }
+  function syncSqlFromDesigner(){
+    try {
+      const sql = buildSqlFromDesigner();
+      if (monacoEditor){ monacoEditor.setValue(sql); }
+      computeAndRun(sql);
+    } catch {}
+  }
+  function initDesignerEvents(){
+    document.getElementById('designerGenerateSql')?.addEventListener('click', ()=>{
+      const sql = buildSqlFromDesigner();
+      if (monacoEditor){ monacoEditor.setValue(sql); }
+      computeAndRun(sql);
+      document.querySelector('#resultsTabs .tab[data-tab="table"]')?.click();
+    });
+  document.getElementById('designerClearLinks')?.addEventListener('click', ()=>{ designerState.links.length=0; renderDesignerLinks(); drawAllLinks(); syncSqlFromDesigner(); });
+  window.addEventListener('resize', ()=>{ try { drawAllLinks(); } catch {} });
+  }
+
   function adjustContentOffset(){ try{ const toolbar=document.getElementById('mainToolbar'); const main=document.querySelector('.app-main'); if(!toolbar||!main) return; const h=toolbar.getBoundingClientRect().height; main.style.paddingTop = h + 'px'; } catch {} }
   function alignSqlToolbar(){
     try{
@@ -344,6 +646,8 @@
     if (monacoEditor && !monacoEditor.getValue().trim()) monacoEditor.setValue('SELECT * FROM data LIMIT 100');
     try { populateResultsFilter(); renderMultiFromDataRoot(); renderRaw(collectRootArrays()); } catch { renderTable(rows); renderRaw(rows); }
     buildSourceRadios(parsed);
+  // Refresh designer
+  try { refreshDesignerVisibility(); renderDesignerTables(); renderDesignerLinks(); } catch {}
     // Also refresh the SQL status under the editor with total rows across tables
     try { const status=document.getElementById('sqlStatus'); if (status){ const groups=collectRootArrays(); const total=groups.reduce((a,g)=>a+(g.rows?.length||0),0); status.textContent=`${total} row(s)`; } } catch {}
   }
@@ -423,7 +727,39 @@
       let lastTab=localStorage.getItem('jsonxml2sql_results_tab') || 'table';
       switchTo(lastTab);
       for (const btn of tabButtons) btn.addEventListener('click', ()=>{ switchTo(btn.dataset.tab); });
-      function switchTo(name){ for (const btn of tabButtons) btn.classList.toggle('active', btn.dataset.tab===name); for (const key of Object.keys(panels)) panels[key].classList.toggle('active', key===name); localStorage.setItem('jsonxml2sql_results_tab', name); if (name==='tree'){ const panel=document.getElementById('panel-results-table'); if (panel && panel.classList.contains('multi-table')){ const all=collectRootArrays(); const sel=document.getElementById('resultsFilter'); const groups=(!sel||!sel.value||sel.value==='ALL')? all : all.filter(g=>g.name===sel.value); try { renderTreeGroups(groups); } catch {} } else { const rows=lastQueryRows.length ? lastQueryRows : loadedRows; try { renderTree(rows, prettyFromLabel()); } catch {} } } }
+      function switchTo(name){
+        for (const btn of tabButtons) btn.classList.toggle('active', btn.dataset.tab===name);
+        for (const key of Object.keys(panels)) panels[key].classList.toggle('active', key===name);
+        localStorage.setItem('jsonxml2sql_results_tab', name);
+        if (name==='tree'){
+          const panel=document.getElementById('panel-results-table');
+          if (panel && panel.classList.contains('multi-table')){
+            const all=collectRootArrays(); const sel=document.getElementById('resultsFilter'); const groups=(!sel||!sel.value||sel.value==='ALL')? all : all.filter(g=>g.name===sel.value); try { renderTreeGroups(groups); } catch {}
+          } else {
+            const rows=lastQueryRows.length ? lastQueryRows : loadedRows; try { renderTree(rows, prettyFromLabel()); } catch {}
+          }
+        }
+      }
+    }
+
+    // Editor/Designer tabs (near the SQL editor)
+    const editorTabs = document.getElementById('editorTabs');
+    if (editorTabs){
+      const tabButtons=editorTabs.querySelectorAll('.tab');
+      const panels={ 'editor': document.getElementById('panel-editor'), 'designer': document.getElementById('panel-designer') };
+      let last = localStorage.getItem('jsonxml2sql_editor_tab') || 'editor';
+      switchTo(last);
+      for (const btn of tabButtons) btn.addEventListener('click', ()=>{ switchTo(btn.dataset.tab); });
+      function switchTo(name){
+        for (const btn of tabButtons) btn.classList.toggle('active', btn.dataset.tab===name);
+        for (const key of Object.keys(panels)) panels[key].classList.toggle('active', key===name);
+        localStorage.setItem('jsonxml2sql_editor_tab', name);
+        if (name==='designer'){
+          try { refreshDesignerVisibility(); renderDesignerTables(); renderDesignerLinks(); initDesignerEvents(); } catch {}
+        } else if (name==='editor'){
+          try { if (monacoEditor) monacoEditor.layout(); } catch {}
+        }
+      }
     }
 
     // Clear storage & insert generator
@@ -440,7 +776,7 @@
 
   function generateInsertSQL(rows, tableName){ const cols=uniqueKeys(rows).sort(); const sqlEscape=(v)=>{ if (v==null) return 'NULL'; if (typeof v==='number') return isFinite(v)? String(v) : 'NULL'; if (typeof v==='boolean') return v? 'TRUE':'FALSE'; if (typeof v==='object') v=JSON.stringify(v); return '\'' + String(v).replace(/'/g, "''") + '\''; }; const header=`INSERT INTO ${tableName} (${cols.join(', ')}) VALUES`; const values=rows.map(r=>`(${cols.map(c=>sqlEscape(r[c])).join(', ')})`); return header + '\n' + values.join(',\n') + ';'; }
 
-  function init(){ attachEvents(); initThemeSwitch(); initMonaco(); initTheme(); initParsers(); requestAnimationFrame(()=>{ adjustContentOffset(); alignSqlToolbar(); }); window.addEventListener('resize', debounce(()=>{ adjustContentOffset(); alignSqlToolbar(); },50)); initSplitter(); }
+  function init(){ attachEvents(); initThemeSwitch(); initMonaco(); initTheme(); initParsers(); requestAnimationFrame(()=>{ adjustContentOffset(); alignSqlToolbar(); }); window.addEventListener('resize', debounce(()=>{ adjustContentOffset(); alignSqlToolbar(); drawAllLinks(); },50)); initSplitter(); }
   // Update footer year on DOMContentLoaded as part of init
   const _setFooterYear = () => { try { const el=document.getElementById('footerYear'); if (el) el.textContent = String(new Date().getFullYear()); } catch {} };
   document.addEventListener('DOMContentLoaded', _setFooterYear);

@@ -63,6 +63,7 @@ body.dark-mode {
     /* default values will be overridden by theme classes */
     --bg: #0f172a;
     --panel: #111827;
+	--paper: var(--panel);
     --text: #e5e7eb;
     --muted: #94a3b8;
     --border: #1f2937;
@@ -351,6 +352,8 @@ tbody tr:nth-child(odd) { background: var(--row-alt); }
 	margin: 2px 0 8px 0;
 }
 
+/* (vertical splitter removed) */
+
 /* Results row spans both columns */
 .results { grid-column: 1 / -1; }
 
@@ -377,6 +380,41 @@ tbody tr:nth-child(odd) { background: var(--row-alt); }
 .app-footer .footer-meta { margin-left: auto; display: inline-flex; align-items: center; gap: 10px; }
 .app-footer .gh-link { color: var(--muted); display: inline-flex; align-items: center; }
 .app-footer .gh-link:hover { color: var(--text); }
+
+/* Designer */
+.designer { display: flex; flex-direction: column; gap: 10px; padding: 8px 0; }
+.designer-toolbar { display: flex; align-items: center; gap: 8px; }
+.designer-canvas { position: relative; min-height: 320px; border: 1px solid var(--border); border-radius: 8px; background: var(--paper); overflow: hidden; }
+.designer-svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.designer-tables { position: absolute; inset: 0; padding: 10px; }
+.designer-table { position: absolute; width: 280px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); box-shadow: 0 2px 6px rgba(0,0,0,0.08); }
+.designer-table .dt-head { font-weight: 600; padding: 8px 10px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; background: var(--accent, #2563eb); color: #fff; cursor: move; border-top-left-radius: 6px; border-top-right-radius: 6px; }
+.designer-table .dt-head .dt-title { font-size: 13.5px; }
+.designer-table .dt-body { max-height: 260px; overflow: auto; background: var(--bg); }
+.designer-table .dt-fields { list-style: none; margin: 0; padding: 4px 0; }
+.designer-table .dt-fields li { display: flex; align-items: center; gap: 10px; padding: 6px 10px; font-size: 13.5px; border-bottom: 1px dashed transparent; -webkit-user-select: none; user-select: none; }
+.designer-table .dt-fields li:hover { background: var(--paper); border-bottom-color: var(--border); }
+.designer-field-check { -webkit-transform: scale(1.35); transform: scale(1.35); -webkit-transform-origin: center; transform-origin: center; accent-color: var(--accent, #2b6cf6); cursor: pointer; }
+/* Blueprint-like ports on both sides */
+.designer-field-pin { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--accent, #2b6cf6); background: var(--panel); flex: 0 0 auto; cursor: grab; box-shadow: 0 0 0 2px var(--bg) inset, 0 0 0 1px rgba(0,0,0,0.2); transition: transform 0.06s ease, box-shadow 0.12s ease; }
+.designer-field-pin:hover { box-shadow: 0 0 0 2px var(--bg) inset, 0 0 6px rgba(43,108,246,0.6); }
+.designer-field-pin:active { transform: scale(0.95); }
+.designer-field-pin.pin-left { margin-left: 6px; }
+.designer-field-pin.pin-right { margin-left: auto; margin-right: 6px; }
+.designer-field { flex: 1 1 auto; font-size: 14px; line-height: 1.7; cursor: default; }
+.designer-field[data-type="number"] { color: var(--text); }
+.designer-link-preview { stroke: var(--accent, #2b6cf6); stroke-width: 3; fill: none; opacity: 0.5; }
+/* Use these styles for SVG path links (curved) */
+.designer-link-line { stroke: var(--accent, #2b6cf6); stroke-width: 3; fill: none; filter: drop-shadow(0 0 1px rgba(43,108,246,0.8)); }
+.designer-link-glow { stroke: rgba(43,108,246,0.35); stroke-width: 7; fill: none; stroke-linecap: round; }
+.designer-link-end { fill: #fff; stroke: var(--accent, #3b82f6); stroke-width: 2; }
+.tabs#editorTabs { margin-top: 10px; }
+.tabs#editorTabs .tab { padding: 6px 10px; }
+.tab-panel#panel-designer { padding-top: 6px; }
+.designer-links { border: 1px dashed var(--border); border-radius: 6px; padding: 8px; min-height: 38px; }
+.designer-link-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; margin: 6px 0; background: var(--paper); }
+.designer-empty { display: none; }
+.designer-empty.show { display: block; }
 
 
 

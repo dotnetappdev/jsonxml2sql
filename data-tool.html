@@ -48,8 +48,40 @@
 					<button id="clearStorageBtn" class="btn primary">Clear Storage</button>
 					<button id="clearSqlBtn" class="btn">Clear SQL</button>
 				</div>
-				<div id="sqlMonaco" class="monaco-wrap" aria-label="SQL editor"></div>
-				<div id="sqlStatus" class="status-row muted"></div>
+				<div class="tabs" id="editorTabs">
+					<button class="tab active" data-tab="editor">Editor</button>
+					<button class="tab" data-tab="designer">Designer</button>
+				</div>
+				<div class="tab-panel active" id="panel-editor">
+					<div id="sqlMonaco" class="monaco-wrap" aria-label="SQL editor"></div>
+					<div id="sqlStatus" class="status-row muted"></div>
+				</div>
+				<div class="tab-panel" id="panel-designer">
+					<div id="designer" class="designer" aria-label="Join designer">
+						<div id="designerEmptyHint" class="muted designer-empty">Designer needs 2 or more tables. Load JSON/XML with multiple arrays under <code>data.*</code>.</div>
+						<div class="designer-toolbar">
+							<label for="designerDefaultJoinType" class="muted">Default join</label>
+							<select id="designerDefaultJoinType" aria-label="Default join">
+								<option value="INNER">INNER</option>
+								<option value="LEFT">LEFT</option>
+								<option value="RIGHT">RIGHT</option>
+								<option value="FULL">FULL</option>
+							</select>
+							<button id="designerClearLinks" class="btn">Clear links</button>
+							<button id="designerGenerateSql" class="btn primary">Generate SQL</button>
+						</div>
+						<div id="designerCanvas" class="designer-canvas">
+							<svg id="designerSvg" class="designer-svg" aria-hidden="true"></svg>
+							<div id="designerTables" class="designer-tables" aria-label="Tables"></div>
+						</div>
+			<div id="designerLinks" class="designer-links" aria-label="Defined links"></div>
+					</div>
+				</div>
+
+				<!-- Horizontal splitter to resize input/editor heights -->
+				<div id="hSplit" class="h-splitter" role="separator" aria-orientation="horizontal" aria-label="Resize editor height"></div>
+
+        
 
 					<div class="pane-header">
 						<h2>Results</h2>
@@ -76,7 +108,7 @@
 					<div id="resultsTree" class="tree" aria-label="Tree results"></div>
 				</div>
 			</div>
-		</section>
+	</section>
 	</main>
 
 	<footer class="app-footer">
