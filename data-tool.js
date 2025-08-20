@@ -110,6 +110,110 @@
     return fieldTypes;
   }
 
+  // ---- Code Generation Templates ----
+  const templates = {
+    crudInterface: (className, namespace) => `using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+
+namespace ${namespace}.Interfaces
+{
+    public interface I${className}Service
+    {
+        Task<IEnumerable<${className}>> GetAllAsync();
+        Task<${className}?> GetByIdAsync(int id);
+        Task<${className}> CreateAsync(${className} entity);
+        Task<${className}> UpdateAsync(${className} entity);
+        Task<bool> DeleteAsync(int id);
+        Task<bool> ExistsAsync(int id);
+    }
+}`,
+
+    crudService: (className, namespace, primaryKeyField = 'Id') => `using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using Microsoft.EntityFrameworkCore;
+using ${namespace}.Interfaces;
+
+namespace ${namespace}.Services
+{
+    public class ${className}Service : I${className}Service
+    {
+        private readonly ApplicationDbContext _context;
+
+        public ${className}Service(ApplicationDbContext context)
+        {
+            _context = context;
+        }
+
+        public async Task<IEnumerable<${className}>> GetAllAsync()
+        {
+            return await _context.${className}s.ToListAsync();
+        }
+
+        public async Task<${className}?> GetByIdAsync(int id)
+        {
+            return await _context.${className}s.FindAsync(id);
+        }
+
+        public async Task<${className}> CreateAsync(${className} entity)
+        {
+            _context.${className}s.Add(entity);
+            await _context.SaveChangesAsync();
+            return entity;
+        }
+
+        public async Task<${className}> UpdateAsync(${className} entity)
+        {
+            _context.Entry(entity).State = EntityState.Modified;
+            await _context.SaveChangesAsync();
+            return entity;
+        }
+
+        public async Task<bool> DeleteAsync(int id)
+        {
+            var entity = await _context.${className}s.FindAsync(id);
+            if (entity == null)
+            {
+                return false;
+            }
+
+            _context.${className}s.Remove(entity);
+            await _context.SaveChangesAsync();
+            return true;
+        }
+
+        public async Task<bool> ExistsAsync(int id)
+        {
+            return await _context.${className}s.AnyAsync(e => e.${primaryKeyField} == id);
+        }
+    }
+}`,
+
+    dependencyInjection: (classNames, namespace) => {
+      const registrations = classNames.map(className => 
+        `            services.AddScoped<I${className}Service, ${className}Service>();`
+      ).join('\n');
+      
+      return `using ${namespace}.Interfaces;
+using ${namespace}.Services;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace ${namespace}.Extensions
+{
+    public static class ServiceCollectionExtensions
+    {
+        public static IServiceCollection Add${namespace.split('.').pop()}Services(this IServiceCollection services)
+        {
+${registrations}
+            return services;
+        }
+    }
+}`;
+    }
+  };
+
   function renderPreview(obj) { const prev = document.getElementById('preview'); if (!prev) return; try { prev.textContent = JSON.stringify(obj, null, 2); } catch { prev.textContent = String(obj); } }
   function updateInputInfo() {
     try {
@@ -1589,6 +1693,7 @@
         const usePlural = document.getElementById('dotnetPlural').checked;
         const generateDbContext = document.getElementById('dotnetDbContext').checked;
         const includeForeignKeys = document.getElementById('dotnetForeignKeys').checked;
+        const generateCrudService = document.getElementById('dotnetCrudService').checked;
         
         if (!namespace) {
           showModal('Please enter a namespace.', 'Namespace required');
@@ -1603,6 +1708,7 @@
         
         const files = {};
         const tableNames = [];
+        const classNames = [];
         
         // Get designer links for foreign key relationships
         const links = includeForeignKeys ? (designerState.links || []) : [];
@@ -1610,14 +1716,69 @@
         for (const group of groups) {
           const tableName = group.name.replace(/^data\./, '') || 'table';
           tableNames.push(group.name);
-          const cleanName = tableName.charAt(0).toUpperCase() + tableName.slice(1).replace(/[^a-zA-Z0-9]/g, '');
+          let cleanName = tableName.charAt(0).toUpperCase() + tableName.slice(1).replace(/[^a-zA-Z0-9]/g, '');
+          
+          // Apply plural/singular naming consistently
+          if (usePlural && !cleanName.endsWith('s')) {
+            cleanName += 's';
+          } else if (!usePlural && cleanName.endsWith('s') && cleanName.length > 1) {
+            cleanName = cleanName.slice(0, -1);
+          }
+          
+          classNames.push(cleanName);
           const modelCode = generateDotNetModel(group.name, group.rows, namespace, usePlural, includeForeignKeys, links);
-          files[`${cleanName}.cs`] = modelCode;
+          files[`Models/${cleanName}.cs`] = modelCode;
         }
         
         if (generateDbContext) {
           const dbContextCode = generateApplicationDbContext(tableNames, namespace, usePlural);
-          files['ApplicationDbContext.cs'] = dbContextCode;
+          files['Data/ApplicationDbContext.cs'] = dbContextCode;
+        }
+        
+        if (generateCrudService) {
+          // Generate interfaces and services for each class
+          for (const className of classNames) {
+            // Find the primary key field for this class
+            const groupForClass = groups.find(g => {
+              const tableName = g.name.replace(/^data\./, '') || 'table';
+              let cleanName = tableName.charAt(0).toUpperCase() + tableName.slice(1).replace(/[^a-zA-Z0-9]/g, '');
+              if (usePlural && !cleanName.endsWith('s')) {
+                cleanName += 's';
+              } else if (!usePlural && cleanName.endsWith('s') && cleanName.length > 1) {
+                cleanName = cleanName.slice(0, -1);
+              }
+              return cleanName === className;
+            });
+            
+            let primaryKeyField = 'Id';
+            if (groupForClass) {
+              const fieldTypes = analyzeTableFields(groupForClass.rows);
+              const fields = Object.keys(fieldTypes);
+              
+              // Look for 'id' field first (case-insensitive)
+              let idField = fields.find(field => field.toLowerCase() === 'id');
+              
+              // If no 'id' field, look for field ending with 'id' (like orderId, userId)
+              if (!idField) {
+                idField = fields.find(field => field.toLowerCase().endsWith('id'));
+              }
+              
+              // If still no ID field found, use the first field as primary key
+              if (!idField) {
+                idField = fields[0];
+              }
+              
+              if (idField) {
+                primaryKeyField = idField.charAt(0).toUpperCase() + idField.slice(1);
+              }
+            }
+            
+            files[`Interfaces/I${className}Service.cs`] = templates.crudInterface(className, namespace);
+            files[`Services/${className}Service.cs`] = templates.crudService(className, namespace, primaryKeyField);
+          }
+          
+          // Generate dependency injection extension
+          files['Extensions/ServiceCollectionExtensions.cs'] = templates.dependencyInjection(classNames, namespace);
         }
         
         if (Object.keys(files).length === 1) {
@@ -1627,7 +1788,7 @@
         } else {
           // Multiple files - create combined content
           const zipContent = createZipContent(files);
-          downloadBlob(zipContent, 'models.cs', 'text/plain;charset=utf-8');
+          downloadBlob(zipContent, 'dotnet-models.cs', 'text/plain;charset=utf-8');
         }
         
         modal.classList.add('hidden');
