@@ -1196,6 +1196,7 @@
       }
       try {
         loadData(text);
+  try { window.gtag && window.gtag('event', 'load_data'); } catch {}
       } catch(e){
         showModal(`<p>${(e && e.message) ? e.message : 'Failed to load data.'}</p>`, 'Load error');
       }
@@ -1214,7 +1215,7 @@
 
     // Run / Clear SQL
     const runBtn=document.getElementById('runSqlBtn');
-    runBtn?.addEventListener('click', ()=>{ if (!ensureDataOrWarn()) return; const sql = monacoEditor ? monacoEditor.getValue() : ''; computeAndRun(sql); });
+  runBtn?.addEventListener('click', ()=>{ if (!ensureDataOrWarn()) return; const sql = monacoEditor ? monacoEditor.getValue() : ''; computeAndRun(sql); try { window.gtag && window.gtag('event', 'run_sql'); } catch {} });
     const clearSqlBtn=document.getElementById('clearSqlBtn');
     clearSqlBtn?.addEventListener('click', ()=>{ if (monacoEditor) monacoEditor.setValue(''); const status=document.getElementById('sqlStatus'); if (status) status.textContent=''; renderSingleTableView(); renderTable([]); const rawEl=document.getElementById('resultsRaw'); if (rawEl) rawEl.textContent=''; const treeEl=document.getElementById('resultsTree'); if (treeEl) treeEl.innerHTML=''; const sel=document.getElementById('resultsFilter'); if (sel) sel.value='ALL'; lastQueryRows=[]; window.lastQueryRows=lastQueryRows; });
 
@@ -1292,7 +1293,7 @@
     // Results filter and downloads
     const filter=document.getElementById('resultsFilter');
     filter?.addEventListener('change', ()=>{ renderMultiFromDataRoot(); const treePanel=document.getElementById('panel-results-tree'); if (treePanel && treePanel.classList.contains('active')){ const all=collectRootArrays(); const sel=document.getElementById('resultsFilter'); const groups=(!sel||!sel.value||sel.value==='ALL')? all : all.filter(g=>g.name===sel.value); try { renderTreeGroups(groups); } catch {} } });
-  document.getElementById('downloadCsvBtn')?.addEventListener('click', ()=>{ const groups=getFilteredGroups(); const csv=groups.map(g=>`# ${g.name}\n` + toCSV(g.rows)).join('\n\n'); downloadBlob(csv, 'results.csv', 'text/csv;charset=utf-8'); });
+  document.getElementById('downloadCsvBtn')?.addEventListener('click', ()=>{ const groups=getFilteredGroups(); const csv=groups.map(g=>`# ${g.name}\n` + toCSV(g.rows)).join('\n\n'); downloadBlob(csv, 'results.csv', 'text/csv;charset=utf-8'); try { window.gtag && window.gtag('event', 'download_csv'); } catch {} });
   }
 
   function generateInsertSQL(rows, tableName){ const cols=uniqueKeys(rows).sort(); const sqlEscape=(v)=>{ if (v==null) return 'NULL'; if (typeof v==='number') return isFinite(v)? String(v) : 'NULL'; if (typeof v==='boolean') return v? 'TRUE':'FALSE'; if (typeof v==='object') v=JSON.stringify(v); return '\'' + String(v).replace(/'/g, "''") + '\''; }; const header=`INSERT INTO ${tableName} (${cols.join(', ')}) VALUES`; const values=rows.map(r=>`(${cols.map(c=>sqlEscape(r[c])).join(', ')})`); return header + '\n' + values.join(',\n') + ';'; }
