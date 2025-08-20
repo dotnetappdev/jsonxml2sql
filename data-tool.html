@@ -250,6 +250,15 @@
 						<span>Export foreign key tables (include navigation properties)</span>
 					</label>
 				</div>
+				
+				<!-- Foreign Key Relationships Configuration -->
+				<div id="dotnetRelationshipConfig" style="margin: 12px 0; display: none;">
+					<h4 style="margin: 8px 0 12px 0; color: var(--text);">Configure Relationships:</h4>
+					<div id="dotnetRelationshipsList" style="max-height: 200px; overflow-y: auto; border: 1px solid var(--border); border-radius: 4px; padding: 8px; background: var(--bg-secondary, var(--bg));">
+						<!-- Relationships will be populated by JavaScript -->
+					</div>
+				</div>
+				
 				<div style="margin: 12px 0;">
 					<label style="display: flex; align-items: center; gap: 8px;">
 						<input type="checkbox" id="dotnetCrudService" style="accent-color: var(--accent, #2b6cf6);">

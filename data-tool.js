@@ -1498,7 +1498,7 @@ ${registrations}
       return sql;
     }
 
-    function generateDotNetModel(tableName, rows, namespace, usePlural, includeForeignKeys = false, designerLinks = []) {
+    function generateDotNetModel(tableName, rows, namespace, usePlural, includeForeignKeys = false, designerLinks = [], relationshipConfigs = {}) {
       if (!rows || rows.length === 0) return `// No data for model ${tableName}`;
       
       const fieldTypes = analyzeTableFields(rows);
@@ -1538,20 +1538,21 @@ ${registrations}
         const relatedTables = new Set();
         
         // Find links where this table is involved
-        for (const link of designerLinks) {
+        designerLinks.forEach((link, index) => {
+          const relationshipType = relationshipConfigs[index] || 'one-to-many'; // Default fallback
           let relatedTable = null;
-          let isOneToMany = false;
+          let isCurrentTableLeft = false;
           
           if (link.leftTable === tableName) {
             relatedTable = link.rightTable;
-            isOneToMany = link.fkSide === 'left'; // If FK is on left side, it's many-to-one from left perspective
+            isCurrentTableLeft = true;
           } else if (link.rightTable === tableName) {
             relatedTable = link.leftTable;
-            isOneToMany = link.fkSide === 'right'; // If FK is on right side, it's many-to-one from right perspective
+            isCurrentTableLeft = false;
           }
           
-          if (relatedTable && !relatedTables.has(relatedTable)) {
-            relatedTables.add(relatedTable);
+          if (relatedTable && !relatedTables.has(relatedTable + '_' + relationshipType)) {
+            relatedTables.add(relatedTable + '_' + relationshipType);
             
             // Clean related table name
             let relatedClassName = relatedTable.replace(/^data\./, '').replace(/[^a-zA-Z0-9]/g, '');
@@ -1563,17 +1564,41 @@ ${registrations}
               relatedClassName = relatedClassName.slice(0, -1);
             }
             
-            if (isOneToMany) {
-              // One-to-many relationship (collection)
-              code += `\n        // Navigation property\n`;
-              code += `        public virtual ICollection<${relatedClassName}> ${relatedClassName}s { get; set; } = new List<${relatedClassName}>();\n`;
-            } else {
-              // Many-to-one relationship (single reference)
-              code += `\n        // Navigation property\n`;
-              code += `        public virtual ${relatedClassName}? ${relatedClassName} { get; set; }\n`;
+            code += `\n        // Navigation property - ${relationshipType} relationship\n`;
+            
+            switch (relationshipType) {
+              case 'one-to-many':
+                if (isCurrentTableLeft) {
+                  // Current table is the "one" side, related table is the "many" side
+                  code += `        public virtual ICollection<${relatedClassName}> ${relatedClassName}s { get; set; } = new List<${relatedClassName}>();\n`;
+                } else {
+                  // Current table is the "many" side, related table is the "one" side
+                  code += `        public virtual ${relatedClassName}? ${relatedClassName} { get; set; }\n`;
+                }
+                break;
+                
+              case 'many-to-one':
+                if (isCurrentTableLeft) {
+                  // Current table is the "many" side, related table is the "one" side
+                  code += `        public virtual ${relatedClassName}? ${relatedClassName} { get; set; }\n`;
+                } else {
+                  // Current table is the "one" side, related table is the "many" side
+                  code += `        public virtual ICollection<${relatedClassName}> ${relatedClassName}s { get; set; } = new List<${relatedClassName}>();\n`;
+                }
+                break;
+                
+              case 'many-to-many':
+                // Both sides have collections
+                code += `        public virtual ICollection<${relatedClassName}> ${relatedClassName}s { get; set; } = new List<${relatedClassName}>();\n`;
+                break;
+                
+              case 'one-to-one':
+                // Both sides have single references
+                code += `        public virtual ${relatedClassName}? ${relatedClassName} { get; set; }\n`;
+                break;
             }
           }
-        }
+        });
       }
       
       code += `    }\n}\n`;
@@ -1675,9 +1700,61 @@ ${registrations}
       document.getElementById('sqlTablesModalClose')?.addEventListener('click', onCancel);
     }
 
+    function populateRelationshipConfiguration() {
+      const configDiv = document.getElementById('dotnetRelationshipConfig');
+      const listDiv = document.getElementById('dotnetRelationshipsList');
+      if (!configDiv || !listDiv) return;
+      
+      const links = designerState.links || [];
+      if (links.length === 0) {
+        configDiv.style.display = 'none';
+        return;
+      }
+      
+      listDiv.innerHTML = '';
+      
+      links.forEach((link, index) => {
+        const relationshipDiv = document.createElement('div');
+        relationshipDiv.style.cssText = 'margin: 8px 0; padding: 8px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg);';
+        
+        const leftTable = tableDisplayName(link.leftTable);
+        const rightTable = tableDisplayName(link.rightTable);
+        
+        relationshipDiv.innerHTML = `
+          <div style="margin-bottom: 8px; font-weight: bold; color: var(--text);">
+            ${leftTable}.${link.leftCol} ⟷ ${rightTable}.${link.rightCol}
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <label style="color: var(--text);">Relationship type:</label>
+            <select class="relationship-type-select" data-link-index="${index}" style="padding: 4px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text);">
+              <option value="one-to-many">One-to-Many (${leftTable} → many ${rightTable})</option>
+              <option value="many-to-one">Many-to-One (many ${leftTable} → ${rightTable})</option>
+              <option value="many-to-many">Many-to-Many (${leftTable} ⟷ ${rightTable})</option>
+              <option value="one-to-one">One-to-One (${leftTable} ⟷ ${rightTable})</option>
+            </select>
+          </div>
+        `;
+        
+        listDiv.appendChild(relationshipDiv);
+        
+        // Set initial value based on current fkSide
+        const select = relationshipDiv.querySelector('.relationship-type-select');
+        if (link.fkSide === 'left') {
+          select.value = 'many-to-one';
+        } else if (link.fkSide === 'right') {
+          select.value = 'one-to-many';
+        } else {
+          select.value = 'one-to-one'; // Default for no fkSide
+        }
+      });
+    }
+
     function showDotNetModelsModal() {
       const modal = document.getElementById('dotnetModelsModal');
       if (!modal) return;
+      
+      // Populate relationship configuration
+      populateRelationshipConfiguration();
       
       modal.classList.remove('hidden');
       document.getElementById('dotnetNamespace').focus();
@@ -1686,7 +1763,20 @@ ${registrations}
         document.getElementById('dotnetModelsSave')?.removeEventListener('click', onSave);
         document.getElementById('dotnetModelsCancel')?.removeEventListener('click', onCancel);
         document.getElementById('dotnetModelsModalClose')?.removeEventListener('click', onCancel);
+        document.getElementById('dotnetForeignKeys')?.removeEventListener('change', onForeignKeyToggle);
       };
+      
+      const onForeignKeyToggle = () => {
+        const isChecked = document.getElementById('dotnetForeignKeys').checked;
+        const configDiv = document.getElementById('dotnetRelationshipConfig');
+        if (configDiv) {
+          configDiv.style.display = isChecked ? 'block' : 'none';
+        }
+      };
+      
+      // Set up foreign key toggle listener
+      document.getElementById('dotnetForeignKeys')?.addEventListener('change', onForeignKeyToggle);
+      onForeignKeyToggle(); // Initialize visibility
       
       const onSave = () => {
         const namespace = document.getElementById('dotnetNamespace').value.trim();
@@ -1713,6 +1803,18 @@ ${registrations}
         // Get designer links for foreign key relationships
         const links = includeForeignKeys ? (designerState.links || []) : [];
         
+        // Collect relationship configurations from the UI
+        const relationshipConfigs = {};
+        if (includeForeignKeys) {
+          const selects = document.querySelectorAll('.relationship-type-select');
+          selects.forEach(select => {
+            const linkIndex = parseInt(select.dataset.linkIndex);
+            if (linkIndex >= 0 && linkIndex < links.length) {
+              relationshipConfigs[linkIndex] = select.value;
+            }
+          });
+        }
+        
         for (const group of groups) {
           const tableName = group.name.replace(/^data\./, '') || 'table';
           tableNames.push(group.name);
@@ -1726,7 +1828,7 @@ ${registrations}
           }
           
           classNames.push(cleanName);
-          const modelCode = generateDotNetModel(group.name, group.rows, namespace, usePlural, includeForeignKeys, links);
+          const modelCode = generateDotNetModel(group.name, group.rows, namespace, usePlural, includeForeignKeys, links, relationshipConfigs);
           files[`Models/${cleanName}.cs`] = modelCode;
         }
         
