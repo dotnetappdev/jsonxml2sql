@@ -9,7 +9,6 @@ Paste JSON or XML on the left. Visualize or run simple SQL-like queries on the r
 
 [![JsonXml2SQL demo](assets/jsonxml2sql.gif)](assets/jsonxml2sql.gif)
 
-Place your GIF at `assets/jsonxml2sql.gif` (you can copy it from `C:\Users\David\Desktop\jsonxml2sql.gif`).
 
 ## Features
 
