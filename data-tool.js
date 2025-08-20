@@ -63,6 +63,219 @@
     return [rowishToObject(parsed)];
   }
 
+  // ---- Type inference for code generation ----
+  function inferDataType(values) {
+    // Analyze sample values to infer the best data type
+    const nonNullValues = values.filter(v => v != null);
+    if (nonNullValues.length === 0) return { sql: 'VARCHAR(255)', csharp: 'string?' };
+    
+    // Check if all are integers
+    const allIntegers = nonNullValues.every(v => 
+      typeof v === 'number' && Number.isInteger(v) && v >= -2147483648 && v <= 2147483647
+    );
+    if (allIntegers) return { sql: 'INT', csharp: 'int' };
+    
+    // Check if all are numbers (including decimals)
+    const allNumbers = nonNullValues.every(v => typeof v === 'number' && isFinite(v));
+    if (allNumbers) return { sql: 'DECIMAL(18,2)', csharp: 'decimal' };
+    
+    // Check if all are booleans
+    const allBooleans = nonNullValues.every(v => typeof v === 'boolean');
+    if (allBooleans) return { sql: 'BIT', csharp: 'bool' };
+    
+    // Check if all are dates (ISO strings)
+    const allDates = nonNullValues.every(v => 
+      typeof v === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(v)
+    );
+    if (allDates) return { sql: 'DATETIME2', csharp: 'DateTime' };
+    
+    // Default to string, but determine length
+    const maxLength = Math.max(...nonNullValues.map(v => String(v).length));
+    const sqlType = maxLength <= 50 ? `VARCHAR(${Math.max(50, maxLength)})` : 
+                   maxLength <= 255 ? `VARCHAR(${maxLength})` : 'TEXT';
+    
+    return { sql: sqlType, csharp: 'string' };
+  }
+
+  function analyzeTableFields(rows) {
+    // Get all unique field names and analyze their types
+    const fields = uniqueKeys(rows);
+    const fieldTypes = {};
+    
+    for (const field of fields) {
+      const values = rows.map(row => row[field]);
+      fieldTypes[field] = inferDataType(values);
+    }
+    
+    return fieldTypes;
+  }
+
+  // ---- Code Generation Templates ----
+  let templateCache = null;
+  
+  async function loadTemplates() {
+    if (templateCache) return templateCache;
+    
+    try {
+      const response = await fetch('templates.txt');
+      const content = await response.text();
+      
+      const templates = {};
+      const sections = content.split('=== ').filter(s => s.trim());
+      
+      for (const section of sections) {
+        const lines = section.split('\n');
+        const templateName = lines[0].split(' ===')[0].trim();
+        const templateContent = lines.slice(1).join('\n').trim();
+        templates[templateName] = templateContent;
+      }
+      
+      templateCache = templates;
+      return templates;
+    } catch (error) {
+      console.error('Failed to load templates:', error);
+      // Fallback to inline templates if loading fails
+      return {
+        CRUD_INTERFACE: `using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+
+namespace {{NAMESPACE}}.Interfaces
+{
+    public interface I{{CLASS_NAME}}Interface
+    {
+        Task<IEnumerable<{{CLASS_NAME}}>> GetAllAsync();
+        Task<{{CLASS_NAME}}?> GetByIdAsync(int id);
+        Task<{{CLASS_NAME}}> CreateAsync({{CLASS_NAME}} entity);
+        Task<{{CLASS_NAME}}> UpdateAsync({{CLASS_NAME}} entity);
+        Task<bool> DeleteAsync(int id);
+        Task<bool> ExistsAsync(int id);
+    }
+}`,
+        CRUD_SERVICE: `using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using Microsoft.EntityFrameworkCore;
+using {{NAMESPACE}}.Interfaces;
+
+namespace {{NAMESPACE}}.Services
+{
+    public class {{CLASS_NAME}}Service : I{{CLASS_NAME}}Interface
+    {
+        private readonly ApplicationDbContext _context;
+
+        public {{CLASS_NAME}}Service(ApplicationDbContext context)
+        {
+            _context = context;
+        }
+
+        public async Task<IEnumerable<{{CLASS_NAME}}>> GetAllAsync()
+        {
+            return await _context.{{CLASS_NAME}}s.ToListAsync();
+        }
+
+        public async Task<{{CLASS_NAME}}?> GetByIdAsync(int id)
+        {
+            return await _context.{{CLASS_NAME}}s.FindAsync(id);
+        }
+
+        public async Task<{{CLASS_NAME}}> CreateAsync({{CLASS_NAME}} entity)
+        {
+            _context.{{CLASS_NAME}}s.Add(entity);
+            await _context.SaveChangesAsync();
+            return entity;
+        }
+
+        public async Task<{{CLASS_NAME}}> UpdateAsync({{CLASS_NAME}} entity)
+        {
+            _context.Entry(entity).State = EntityState.Modified;
+            await _context.SaveChangesAsync();
+            return entity;
+        }
+
+        public async Task<bool> DeleteAsync(int id)
+        {
+            var entity = await _context.{{CLASS_NAME}}s.FindAsync(id);
+            if (entity == null)
+            {
+                return false;
+            }
+
+            _context.{{CLASS_NAME}}s.Remove(entity);
+            await _context.SaveChangesAsync();
+            return true;
+        }
+
+        public async Task<bool> ExistsAsync(int id)
+        {
+            return await _context.{{CLASS_NAME}}s.AnyAsync(e => e.{{PRIMARY_KEY_FIELD}} == id);
+        }
+    }
+}`,
+        DEPENDENCY_INJECTION: `using {{NAMESPACE}}.Interfaces;
+using {{NAMESPACE}}.Services;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace {{NAMESPACE}}.Extensions
+{
+    public static class ServiceCollectionExtensions
+    {
+        public static IServiceCollection Add{{NAMESPACE_SUFFIX}}Services(this IServiceCollection services)
+        {
+{{SERVICE_REGISTRATIONS}}
+            return services;
+        }
+    }
+}`,
+        SERVICE_REGISTRATION_LINE: `            services.AddScoped<I{{CLASS_NAME}}Interface, {{CLASS_NAME}}Service>();`
+      };
+    }
+  }
+  
+  function replaceTemplatePlaceholders(template, placeholders) {
+    let result = template;
+    for (const [key, value] of Object.entries(placeholders)) {
+      const regex = new RegExp(`{{${key}}}`, 'g');
+      result = result.replace(regex, value);
+    }
+    return result;
+  }
+  
+  const templates = {
+    crudInterface: async (className, namespace) => {
+      const templateData = await loadTemplates();
+      return replaceTemplatePlaceholders(templateData.CRUD_INTERFACE, {
+        CLASS_NAME: className,
+        NAMESPACE: namespace
+      });
+    },
+
+    crudService: async (className, namespace, primaryKeyField = 'Id') => {
+      const templateData = await loadTemplates();
+      return replaceTemplatePlaceholders(templateData.CRUD_SERVICE, {
+        CLASS_NAME: className,
+        NAMESPACE: namespace,
+        PRIMARY_KEY_FIELD: primaryKeyField
+      });
+    },
+
+    dependencyInjection: async (classNames, namespace) => {
+      const templateData = await loadTemplates();
+      const registrations = classNames.map(className => 
+        replaceTemplatePlaceholders(templateData.SERVICE_REGISTRATION_LINE, {
+          CLASS_NAME: className
+        })
+      ).join('\n');
+      
+      return replaceTemplatePlaceholders(templateData.DEPENDENCY_INJECTION, {
+        NAMESPACE: namespace,
+        NAMESPACE_SUFFIX: namespace.split('.').pop(),
+        SERVICE_REGISTRATIONS: registrations
+      });
+    }
+  };
+
   function renderPreview(obj) { const prev = document.getElementById('preview'); if (!prev) return; try { prev.textContent = JSON.stringify(obj, null, 2); } catch { prev.textContent = String(obj); } }
   function updateInputInfo() {
     try {
@@ -1284,11 +1497,496 @@
       }
     }
 
+    // ---- Code generation functions ----
+    function generateSQLTable(tableName, rows, options = {}) {
+      if (!rows || rows.length === 0) return `-- No data for table ${tableName}`;
+      
+      const { autoId = true, includeData = false } = options;
+      const fieldTypes = analyzeTableFields(rows);
+      const fields = Object.keys(fieldTypes);
+      
+      // Clean table name: remove "data." prefix and convert to TableName format (Pascal case)
+      let cleanTableName = tableName.replace(/^data\./, '');
+      // Convert to Pascal case: capitalize first letter and letters after underscores, dots, or hyphens
+      cleanTableName = cleanTableName.replace(/[^a-zA-Z0-9_]/g, '_') // Replace non-alphanumeric chars with underscores
+        .split(/[_\.\-\s]+/) // Split on underscores, dots, hyphens, spaces
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()) // Capitalize each word
+        .join(''); // Join without separators for Pascal case
+      
+      let sql = `-- Create table for ${cleanTableName}\n`;
+      sql += `CREATE TABLE ${cleanTableName} (\n`;
+      
+      // Find primary key fields (only exact field name 'id' case-insensitive) when autoId is enabled
+      const idFields = autoId ? fields.filter(field => field.toLowerCase() === 'id') : [];
+      
+      const fieldDefs = fields.map(field => {
+        const cleanField = field.replace(/[^a-zA-Z0-9_]/g, '_');
+        const dataType = fieldTypes[field].sql;
+        const isIdField = field.toLowerCase() === 'id';
+        const isPrimaryKey = autoId && isIdField && idFields.length === 1;
+        
+        if (isPrimaryKey) {
+          return `    ${cleanField} ${dataType} NOT NULL PRIMARY KEY`;
+        } else if (autoId && isIdField) {
+          return `    ${cleanField} ${dataType} NOT NULL`;
+        } else {
+          return `    ${cleanField} ${dataType} NULL`;
+        }
+      });
+      
+      sql += fieldDefs.join(',\n');
+      sql += '\n);\n';
+      
+      if (includeData && rows.length > 0) {
+        sql += `\n-- Insert data for ${cleanTableName}\n`;
+        
+        const cleanFields = fields.map(field => field.replace(/[^a-zA-Z0-9_]/g, '_'));
+        const sqlEscape = (v) => {
+          if (v == null) return 'NULL';
+          if (typeof v === 'number') return isFinite(v) ? String(v) : 'NULL';
+          if (typeof v === 'boolean') return v ? 'TRUE' : 'FALSE';
+          if (typeof v === 'object') v = JSON.stringify(v);
+          return '\'' + String(v).replace(/'/g, "''") + '\'';
+        };
+        
+        sql += `INSERT INTO ${cleanTableName} (${cleanFields.join(', ')}) VALUES\n`;
+        const values = rows.map(row => {
+          const vals = fields.map(field => sqlEscape(row[field]));
+          return `    (${vals.join(', ')})`;
+        });
+        sql += values.join(',\n') + ';\n';
+      }
+      
+      return sql;
+    }
+
+    function generateDotNetModel(tableName, rows, namespace, usePlural, includeForeignKeys = false, designerLinks = [], relationshipConfigs = {}) {
+      if (!rows || rows.length === 0) return `// No data for model ${tableName}`;
+      
+      const fieldTypes = analyzeTableFields(rows);
+      const fields = Object.keys(fieldTypes);
+      
+      // Clean table name and apply naming convention
+      let className = tableName.replace(/^data\./, '').replace(/[^a-zA-Z0-9]/g, '');
+      className = className.charAt(0).toUpperCase() + className.slice(1);
+      
+      if (usePlural && !className.endsWith('s')) {
+        className += 's';
+      } else if (!usePlural && className.endsWith('s') && className.length > 1) {
+        className = className.slice(0, -1);
+      }
+      
+      let code = `using System;\nusing System.ComponentModel.DataAnnotations;\n`;
+      if (includeForeignKeys && designerLinks.length > 0) {
+        code += `using System.Collections.Generic;\n`;
+      }
+      code += `\nnamespace ${namespace}\n{\n`;
+      code += `    public class ${className}\n    {\n`;
+      
+      for (const field of fields) {
+        const cleanField = field.replace(/[^a-zA-Z0-9_]/g, '_');
+        const propName = cleanField.charAt(0).toUpperCase() + cleanField.slice(1);
+        const dataType = fieldTypes[field].csharp;
+        
+        // Id fields should never be nullable as they are auto keys
+        const isIdField = field.toLowerCase() === 'id';
+        const nullable = (dataType.includes('?') || isIdField) ? '' : '?';
+        
+        code += `        public ${dataType}${nullable} ${propName} { get; set; }\n`;
+      }
+      
+      // Add foreign key navigation properties if enabled
+      if (includeForeignKeys && designerLinks.length > 0) {
+        const relatedTables = new Set();
+        
+        // Find links where this table is involved
+        designerLinks.forEach((link, index) => {
+          const relationshipType = relationshipConfigs[index] || 'one-to-many'; // Default fallback
+          let relatedTable = null;
+          let isCurrentTableLeft = false;
+          
+          if (link.leftTable === tableName) {
+            relatedTable = link.rightTable;
+            isCurrentTableLeft = true;
+          } else if (link.rightTable === tableName) {
+            relatedTable = link.leftTable;
+            isCurrentTableLeft = false;
+          }
+          
+          if (relatedTable && !relatedTables.has(relatedTable + '_' + relationshipType)) {
+            relatedTables.add(relatedTable + '_' + relationshipType);
+            
+            // Clean related table name
+            let relatedClassName = relatedTable.replace(/^data\./, '').replace(/[^a-zA-Z0-9]/g, '');
+            relatedClassName = relatedClassName.charAt(0).toUpperCase() + relatedClassName.slice(1);
+            
+            if (usePlural && !relatedClassName.endsWith('s')) {
+              relatedClassName += 's';
+            } else if (!usePlural && relatedClassName.endsWith('s') && relatedClassName.length > 1) {
+              relatedClassName = relatedClassName.slice(0, -1);
+            }
+            
+            code += `\n        // Navigation property - ${relationshipType} relationship\n`;
+            
+            switch (relationshipType) {
+              case 'one-to-many':
+                if (isCurrentTableLeft) {
+                  // Current table is the "one" side, related table is the "many" side
+                  code += `        public virtual ICollection<${relatedClassName}> ${relatedClassName}s { get; set; } = new List<${relatedClassName}>();\n`;
+                } else {
+                  // Current table is the "many" side, related table is the "one" side
+                  code += `        public virtual ${relatedClassName}? ${relatedClassName} { get; set; }\n`;
+                }
+                break;
+                
+              case 'many-to-one':
+                if (isCurrentTableLeft) {
+                  // Current table is the "many" side, related table is the "one" side
+                  code += `        public virtual ${relatedClassName}? ${relatedClassName} { get; set; }\n`;
+                } else {
+                  // Current table is the "one" side, related table is the "many" side
+                  code += `        public virtual ICollection<${relatedClassName}> ${relatedClassName}s { get; set; } = new List<${relatedClassName}>();\n`;
+                }
+                break;
+                
+              case 'many-to-many':
+                // Both sides have collections
+                code += `        public virtual ICollection<${relatedClassName}> ${relatedClassName}s { get; set; } = new List<${relatedClassName}>();\n`;
+                break;
+                
+              case 'one-to-one':
+                // Both sides have single references
+                code += `        public virtual ${relatedClassName}? ${relatedClassName} { get; set; }\n`;
+                break;
+            }
+          }
+        });
+      }
+      
+      code += `    }\n}\n`;
+      return code;
+    }
+
+    function generateApplicationDbContext(tableNames, namespace, usePlural) {
+      let className = usePlural ? 'DbSet' : 'DbSet';
+      let code = `using Microsoft.EntityFrameworkCore;\nusing ${namespace};\n\n`;
+      code += `namespace ${namespace}\n{\n`;
+      code += `    public class ApplicationDbContext : DbContext\n    {\n`;
+      code += `        public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : base(options)\n        {\n        }\n\n`;
+      
+      for (const tableName of tableNames) {
+        let cleanName = tableName.replace(/^data\./, '').replace(/[^a-zA-Z0-9]/g, '');
+        cleanName = cleanName.charAt(0).toUpperCase() + cleanName.slice(1);
+        
+        if (usePlural && !cleanName.endsWith('s')) {
+          cleanName += 's';
+        } else if (!usePlural && cleanName.endsWith('s') && cleanName.length > 1) {
+          cleanName = cleanName.slice(0, -1);
+        }
+        
+        code += `        public DbSet<${cleanName}> ${cleanName} { get; set; }\n`;
+      }
+      
+      code += `    }\n}\n`;
+      return code;
+    }
+
+    // Simple JSZip-like functionality using just JavaScript
+    function createZipContent(files) {
+      // For simplicity, we'll just concatenate files with separators
+      // In a real implementation, you'd use JSZip library
+      let content = '';
+      for (const [filename, fileContent] of Object.entries(files)) {
+        content += `\n// ===== ${filename} =====\n`;
+        content += fileContent;
+        content += `\n// ===== End of ${filename} =====\n`;
+      }
+      return content;
+    }
+
+    function showSQLTablesModal() {
+      const modal = document.getElementById('sqlTablesModal');
+      if (!modal) return;
+      
+      modal.classList.remove('hidden');
+      document.getElementById('sqlTablesFileName').focus();
+      
+      const cleanup = () => {
+        document.getElementById('sqlTablesSave')?.removeEventListener('click', onSave);
+        document.getElementById('sqlTablesCancel')?.removeEventListener('click', onCancel);
+        document.getElementById('sqlTablesModalClose')?.removeEventListener('click', onCancel);
+      };
+      
+      const onSave = () => {
+        const fileName = document.getElementById('sqlTablesFileName').value.trim();
+        const autoId = document.getElementById('sqlTablesAutoId').checked;
+        const includeData = document.getElementById('sqlTablesIncludeData').checked;
+        
+        if (!fileName) return;
+        
+        const groups = collectRootArrays();
+        if (groups.length === 0) {
+          showModal('No tables found. Please load JSON or XML data first.', 'No data');
+          return;
+        }
+        
+        const options = { autoId, includeData };
+        
+        if (groups.length === 1) {
+          // Single file
+          const sql = generateSQLTable(groups[0].name, groups[0].rows, options);
+          downloadBlob(sql, fileName, 'text/plain;charset=utf-8');
+        } else {
+          // Multiple files - create combined content
+          const files = {};
+          for (const group of groups) {
+            const tableName = group.name.replace(/^data\./, '') || 'table';
+            files[`${tableName}.sql`] = generateSQLTable(group.name, group.rows, options);
+          }
+          const zipContent = createZipContent(files);
+          const finalFileName = fileName.endsWith('.zip') ? fileName : fileName.replace(/\.[^.]*$/, '') + '_tables.sql';
+          downloadBlob(zipContent, finalFileName, 'text/plain;charset=utf-8');
+        }
+        
+        modal.classList.add('hidden');
+        cleanup();
+      };
+      
+      const onCancel = () => {
+        modal.classList.add('hidden');
+        cleanup();
+      };
+      
+      document.getElementById('sqlTablesSave')?.addEventListener('click', onSave);
+      document.getElementById('sqlTablesCancel')?.addEventListener('click', onCancel);
+      document.getElementById('sqlTablesModalClose')?.addEventListener('click', onCancel);
+    }
+
+    function populateRelationshipConfiguration() {
+      const configDiv = document.getElementById('dotnetRelationshipConfig');
+      const listDiv = document.getElementById('dotnetRelationshipsList');
+      if (!configDiv || !listDiv) return;
+      
+      const links = designerState.links || [];
+      if (links.length === 0) {
+        configDiv.style.display = 'none';
+        return;
+      }
+      
+      listDiv.innerHTML = '';
+      
+      links.forEach((link, index) => {
+        const relationshipDiv = document.createElement('div');
+        relationshipDiv.style.cssText = 'margin: 8px 0; padding: 8px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg);';
+        
+        const leftTable = tableDisplayName(link.leftTable);
+        const rightTable = tableDisplayName(link.rightTable);
+        
+        relationshipDiv.innerHTML = `
+          <div style="margin-bottom: 8px; font-weight: bold; color: var(--text);">
+            ${leftTable}.${link.leftCol} ⟷ ${rightTable}.${link.rightCol}
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <label style="color: var(--text);">Relationship type:</label>
+            <select class="relationship-type-select" data-link-index="${index}" style="padding: 4px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text);">
+              <option value="one-to-many">One-to-Many (${leftTable} → many ${rightTable})</option>
+              <option value="many-to-one">Many-to-One (many ${leftTable} → ${rightTable})</option>
+              <option value="many-to-many">Many-to-Many (${leftTable} ⟷ ${rightTable})</option>
+              <option value="one-to-one">One-to-One (${leftTable} ⟷ ${rightTable})</option>
+            </select>
+          </div>
+        `;
+        
+        listDiv.appendChild(relationshipDiv);
+        
+        // Set initial value based on current fkSide
+        const select = relationshipDiv.querySelector('.relationship-type-select');
+        if (link.fkSide === 'left') {
+          select.value = 'many-to-one';
+        } else if (link.fkSide === 'right') {
+          select.value = 'one-to-many';
+        } else {
+          select.value = 'one-to-one'; // Default for no fkSide
+        }
+      });
+    }
+
+    function showDotNetModelsModal() {
+      const modal = document.getElementById('dotnetModelsModal');
+      if (!modal) return;
+      
+      // Populate relationship configuration
+      populateRelationshipConfiguration();
+      
+      modal.classList.remove('hidden');
+      document.getElementById('dotnetNamespace').focus();
+      
+      const cleanup = () => {
+        document.getElementById('dotnetModelsSave')?.removeEventListener('click', onSave);
+        document.getElementById('dotnetModelsCancel')?.removeEventListener('click', onCancel);
+        document.getElementById('dotnetModelsModalClose')?.removeEventListener('click', onCancel);
+        document.getElementById('dotnetForeignKeys')?.removeEventListener('change', onForeignKeyToggle);
+      };
+      
+      const onForeignKeyToggle = () => {
+        const isChecked = document.getElementById('dotnetForeignKeys').checked;
+        const configDiv = document.getElementById('dotnetRelationshipConfig');
+        if (configDiv) {
+          configDiv.style.display = isChecked ? 'block' : 'none';
+        }
+      };
+      
+      // Set up foreign key toggle listener
+      document.getElementById('dotnetForeignKeys')?.addEventListener('change', onForeignKeyToggle);
+      onForeignKeyToggle(); // Initialize visibility
+      
+      const onSave = async () => {
+        const namespace = document.getElementById('dotnetNamespace').value.trim();
+        const usePlural = document.getElementById('dotnetPlural').checked;
+        const generateDbContext = document.getElementById('dotnetDbContext').checked;
+        const includeForeignKeys = document.getElementById('dotnetForeignKeys').checked;
+        const generateCrudService = document.getElementById('dotnetCrudService').checked;
+        
+        if (!namespace) {
+          showModal('Please enter a namespace.', 'Namespace required');
+          return;
+        }
+        
+        const groups = collectRootArrays();
+        if (groups.length === 0) {
+          showModal('No tables found. Please load JSON or XML data first.', 'No data');
+          return;
+        }
+        
+        const files = {};
+        const tableNames = [];
+        const classNames = [];
+        
+        // Get designer links for foreign key relationships
+        const links = includeForeignKeys ? (designerState.links || []) : [];
+        
+        // Collect relationship configurations from the UI
+        const relationshipConfigs = {};
+        if (includeForeignKeys) {
+          const selects = document.querySelectorAll('.relationship-type-select');
+          selects.forEach(select => {
+            const linkIndex = parseInt(select.dataset.linkIndex);
+            if (linkIndex >= 0 && linkIndex < links.length) {
+              relationshipConfigs[linkIndex] = select.value;
+            }
+          });
+        }
+        
+        for (const group of groups) {
+          const tableName = group.name.replace(/^data\./, '') || 'table';
+          tableNames.push(group.name);
+          let cleanName = tableName.charAt(0).toUpperCase() + tableName.slice(1).replace(/[^a-zA-Z0-9]/g, '');
+          
+          // Apply plural/singular naming consistently
+          if (usePlural && !cleanName.endsWith('s')) {
+            cleanName += 's';
+          } else if (!usePlural && cleanName.endsWith('s') && cleanName.length > 1) {
+            cleanName = cleanName.slice(0, -1);
+          }
+          
+          classNames.push(cleanName);
+          const modelCode = generateDotNetModel(group.name, group.rows, namespace, usePlural, includeForeignKeys, links, relationshipConfigs);
+          files[`Models/${cleanName}.cs`] = modelCode;
+        }
+        
+        if (generateDbContext) {
+          const dbContextCode = generateApplicationDbContext(tableNames, namespace, usePlural);
+          files['Data/ApplicationDbContext.cs'] = dbContextCode;
+        }
+        
+        if (generateCrudService) {
+          // Generate interfaces and services for each class
+          for (const className of classNames) {
+            // Find the primary key field for this class
+            const groupForClass = groups.find(g => {
+              const tableName = g.name.replace(/^data\./, '') || 'table';
+              let cleanName = tableName.charAt(0).toUpperCase() + tableName.slice(1).replace(/[^a-zA-Z0-9]/g, '');
+              if (usePlural && !cleanName.endsWith('s')) {
+                cleanName += 's';
+              } else if (!usePlural && cleanName.endsWith('s') && cleanName.length > 1) {
+                cleanName = cleanName.slice(0, -1);
+              }
+              return cleanName === className;
+            });
+            
+            let primaryKeyField = 'Id';
+            if (groupForClass) {
+              const fieldTypes = analyzeTableFields(groupForClass.rows);
+              const fields = Object.keys(fieldTypes);
+              
+              // Look for 'id' field first (case-insensitive)
+              let idField = fields.find(field => field.toLowerCase() === 'id');
+              
+              // If no 'id' field, look for field ending with 'id' (like orderId, userId)
+              if (!idField) {
+                idField = fields.find(field => field.toLowerCase().endsWith('id'));
+              }
+              
+              // If still no ID field found, use the first field as primary key
+              if (!idField) {
+                idField = fields[0];
+              }
+              
+              if (idField) {
+                primaryKeyField = idField.charAt(0).toUpperCase() + idField.slice(1);
+              }
+            }
+            
+            files[`Interfaces/I${className}Interface.cs`] = await templates.crudInterface(className, namespace);
+            files[`Services/${className}Service.cs`] = await templates.crudService(className, namespace, primaryKeyField);
+          }
+          
+          // Generate dependency injection extension
+          files['Extensions/ServiceCollectionExtensions.cs'] = await templates.dependencyInjection(classNames, namespace);
+        }
+        
+        if (Object.keys(files).length === 1) {
+          // Single file
+          const [fileName, content] = Object.entries(files)[0];
+          downloadBlob(content, fileName, 'text/plain;charset=utf-8');
+        } else {
+          // Multiple files - create combined content
+          const zipContent = createZipContent(files);
+          downloadBlob(zipContent, 'dotnet-models.cs', 'text/plain;charset=utf-8');
+        }
+        
+        modal.classList.add('hidden');
+        cleanup();
+      };
+      
+      const onCancel = () => {
+        modal.classList.add('hidden');
+        cleanup();
+      };
+      
+      document.getElementById('dotnetModelsSave')?.addEventListener('click', onSave);
+      document.getElementById('dotnetModelsCancel')?.addEventListener('click', onCancel);
+      document.getElementById('dotnetModelsModalClose')?.addEventListener('click', onCancel);
+    }
+
     // Clear storage & insert generator
     const clearStorageBtn=document.getElementById('clearStorageBtn');
     clearStorageBtn?.addEventListener('click', ()=>{ localStorage.clear(); alert('Local storage cleared.'); });
   const genInsertsBtn=document.getElementById('genInsertsBtn');
   genInsertsBtn?.addEventListener('click', ()=>{ if (!ensureDataOrWarn()) return; const rows=lastQueryRows.length ? lastQueryRows : loadedRows; if (!rows.length){ showModal('No rows to convert. Run a query or load data first.', 'Nothing to export'); return; } const tableName = prompt('Table name for INSERTs:', 'my_table'); if (!tableName) return; const sql = generateInsertSQL(rows, tableName); const rawEl=document.getElementById('resultsRaw'); if (rawEl) rawEl.textContent=sql; document.querySelector('#resultsTabs .tab[data-tab="raw"]')?.click(); });
+
+    // SQL Tables and .NET Models generators
+    const genTablesBtn = document.getElementById('genTablesBtn');
+    genTablesBtn?.addEventListener('click', () => {
+      if (!ensureDataOrWarn()) return;
+      showSQLTablesModal();
+    });
+
+    const genModelsBtn = document.getElementById('genModelsBtn');
+    genModelsBtn?.addEventListener('click', () => {
+      if (!ensureDataOrWarn()) return;
+      showDotNetModelsModal();
+    });
 
     // Results filter and downloads
     const filter=document.getElementById('resultsFilter');
