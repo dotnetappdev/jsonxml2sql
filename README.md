@@ -21,6 +21,25 @@ Paste JSON or XML on the left. Visualize or run simple SQL-like queries on the r
 - Monaco editor with SQL keyword, FROM-path, and field completions
 - Theme toggle (light/dark), fixed toolbar, and responsive layout
 - Generate INSERT statements from current results
+- **Generate SQL Tables**: Create CREATE TABLE statements from detected fields and data types
+- **Generate .NET Models**: Create C# model classes with optional ApplicationDbContext
+
+## Code Generation Features
+
+### Generate SQL Tables
+- Analyzes JSON/XML structure and automatically infers SQL data types
+- Creates CREATE TABLE statements for all detected tables
+- Supports both JSON and XML data sources
+- Handles multiple tables with combined output
+- Data type inference: INT, VARCHAR, DECIMAL, BIT, DATETIME2, TEXT
+
+### Generate .NET Models  
+- Creates C# model classes from JSON/XML field structure
+- Configurable namespace
+- Option for plural or singular class names
+- Optional ApplicationDbContext generation with DbSets
+- Proper C# type mapping: int, string, decimal, bool, DateTime
+- Handles multiple model classes with combined output
 
 ## SQL support (lightweight engine)
 
@@ -68,6 +87,70 @@ Notes:
 - Aggregation:
   - `SELECT userId, COUNT(*) AS n, SUM(amount) AS total FROM data.orders GROUP BY userId ORDER BY total DESC`
 
+## Code Generation Examples
+
+### SQL Tables Generation
+
+For JSON data like:
+```json
+{
+  "users": [
+    { "id": 1, "name": "Alice" },
+    { "id": 2, "name": "Bob" }
+  ],
+  "orders": [
+    { "orderId": 101, "userId": 1, "amount": 250 }
+  ]
+}
+```
+
+Generates:
+```sql
+CREATE TABLE [data.users] (
+    [id] INT NULL,
+    [name] VARCHAR(50) NULL
+);
+
+CREATE TABLE [data.orders] (
+    [orderId] INT NULL,
+    [userId] INT NULL,
+    [amount] INT NULL
+);
+```
+
+### .NET Models Generation
+
+From the same JSON data, generates:
+```csharp
+namespace MyApp.Models
+{
+    public class User
+    {
+        public int? Id { get; set; }
+        public string? Name { get; set; }
+    }
+}
+
+namespace MyApp.Models
+{
+    public class Order
+    {
+        public int? OrderId { get; set; }
+        public int? UserId { get; set; }
+        public int? Amount { get; set; }
+    }
+}
+
+// With ApplicationDbContext option:
+public class ApplicationDbContext : DbContext
+{
+    public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : base(options) { }
+    
+    public DbSet<User> User { get; set; }
+    public DbSet<Order> Order { get; set; }
+}
+```
+
 ## Troubleshooting
 
 ### WHERE clause: don't use FROM inside WHERE
@@ -93,6 +176,8 @@ For joins (e.g., filter by an order property while selecting users):
 - Use the filter in Results to narrow the multi-table overview (from `SELECT * FROM data`).
 - To export, use Download CSV.
 - Generate INSERTs from current results with the toolbar button.
+- **Generate SQL Tables**: Click to create CREATE TABLE statements for all detected tables.
+- **Generate .NET Models**: Click to create C# model classes with configurable namespace and DbContext options.
 
 ## Accessibility
 
