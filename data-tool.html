@@ -199,6 +199,18 @@
 					<label for="sqlTablesFileName" style="display: block; margin-bottom: 4px;">File name:</label>
 					<input type="text" id="sqlTablesFileName" value="tables.sql" style="width: 100%; padding: 6px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text);">
 				</div>
+				<div style="margin: 12px 0;">
+					<label style="display: flex; align-items: center; gap: 8px;">
+						<input type="checkbox" id="sqlTablesAutoId" checked style="accent-color: var(--accent, #2b6cf6);">
+						<span>Auto ID (treat 'id' fields as primary keys)</span>
+					</label>
+				</div>
+				<div style="margin: 12px 0;">
+					<label style="display: flex; align-items: center; gap: 8px;">
+						<input type="checkbox" id="sqlTablesIncludeData" style="accent-color: var(--accent, #2b6cf6);">
+						<span>Include data (generate INSERT statements)</span>
+					</label>
+				</div>
 			</div>
 			<div class="modal-footer">
 				<button id="sqlTablesSave" class="btn primary">Save</button>

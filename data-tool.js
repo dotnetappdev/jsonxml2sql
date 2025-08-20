@@ -1332,9 +1332,10 @@
     }
 
     // ---- Code generation functions ----
-    function generateSQLTable(tableName, rows) {
+    function generateSQLTable(tableName, rows, options = {}) {
       if (!rows || rows.length === 0) return `-- No data for table ${tableName}`;
       
+      const { autoId = true, includeData = false } = options;
       const fieldTypes = analyzeTableFields(rows);
       const fields = Object.keys(fieldTypes);
       
@@ -1349,18 +1350,18 @@
       let sql = `-- Create table for ${cleanTableName}\n`;
       sql += `CREATE TABLE ${cleanTableName} (\n`;
       
-      // Find primary key fields (only exact field name 'id' case-insensitive)
-      const idFields = fields.filter(field => field.toLowerCase() === 'id');
+      // Find primary key fields (only exact field name 'id' case-insensitive) when autoId is enabled
+      const idFields = autoId ? fields.filter(field => field.toLowerCase() === 'id') : [];
       
       const fieldDefs = fields.map(field => {
         const cleanField = field.replace(/[^a-zA-Z0-9_]/g, '_');
         const dataType = fieldTypes[field].sql;
         const isIdField = field.toLowerCase() === 'id';
-        const isPrimaryKey = isIdField && idFields.length === 1;
+        const isPrimaryKey = autoId && isIdField && idFields.length === 1;
         
         if (isPrimaryKey) {
           return `    ${cleanField} ${dataType} NOT NULL PRIMARY KEY`;
-        } else if (isIdField) {
+        } else if (autoId && isIdField) {
           return `    ${cleanField} ${dataType} NOT NULL`;
         } else {
           return `    ${cleanField} ${dataType} NULL`;
@@ -1369,6 +1370,26 @@
       
       sql += fieldDefs.join(',\n');
       sql += '\n);\n';
+      
+      if (includeData && rows.length > 0) {
+        sql += `\n-- Insert data for ${cleanTableName}\n`;
+        
+        const cleanFields = fields.map(field => field.replace(/[^a-zA-Z0-9_]/g, '_'));
+        const sqlEscape = (v) => {
+          if (v == null) return 'NULL';
+          if (typeof v === 'number') return isFinite(v) ? String(v) : 'NULL';
+          if (typeof v === 'boolean') return v ? 'TRUE' : 'FALSE';
+          if (typeof v === 'object') v = JSON.stringify(v);
+          return '\'' + String(v).replace(/'/g, "''") + '\'';
+        };
+        
+        sql += `INSERT INTO ${cleanTableName} (${cleanFields.join(', ')}) VALUES\n`;
+        const values = rows.map(row => {
+          const vals = fields.map(field => sqlEscape(row[field]));
+          return `    (${vals.join(', ')})`;
+        });
+        sql += values.join(',\n') + ';\n';
+      }
       
       return sql;
     }
@@ -1458,6 +1479,9 @@
       
       const onSave = () => {
         const fileName = document.getElementById('sqlTablesFileName').value.trim();
+        const autoId = document.getElementById('sqlTablesAutoId').checked;
+        const includeData = document.getElementById('sqlTablesIncludeData').checked;
+        
         if (!fileName) return;
         
         const groups = collectRootArrays();
@@ -1466,16 +1490,18 @@
           return;
         }
         
+        const options = { autoId, includeData };
+        
         if (groups.length === 1) {
           // Single file
-          const sql = generateSQLTable(groups[0].name, groups[0].rows);
+          const sql = generateSQLTable(groups[0].name, groups[0].rows, options);
           downloadBlob(sql, fileName, 'text/plain;charset=utf-8');
         } else {
           // Multiple files - create combined content
           const files = {};
           for (const group of groups) {
             const tableName = group.name.replace(/^data\./, '') || 'table';
-            files[`${tableName}.sql`] = generateSQLTable(group.name, group.rows);
+            files[`${tableName}.sql`] = generateSQLTable(group.name, group.rows, options);
           }
           const zipContent = createZipContent(files);
           const finalFileName = fileName.endsWith('.zip') ? fileName : fileName.replace(/\.[^.]*$/, '') + '_tables.sql';
