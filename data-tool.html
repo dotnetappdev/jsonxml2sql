@@ -211,6 +211,13 @@
 						<span>Include data (generate INSERT statements)</span>
 					</label>
 				</div>
+				
+				<div id="sqlTablesZipFileOption" style="margin: 12px 0; display: none;">
+					<label style="display: flex; align-items: center; gap: 8px;">
+						<input type="checkbox" id="sqlTablesZipFile" style="accent-color: var(--accent, #2b6cf6);">
+						<span>Generate as ZIP file (separate SQL file for each table)</span>
+					</label>
+				</div>
 			</div>
 			<div class="modal-footer">
 				<button id="sqlTablesSave" class="btn primary">Save</button>
@@ -263,6 +270,13 @@
 					<label style="display: flex; align-items: center; gap: 8px;">
 						<input type="checkbox" id="dotnetCrudService" style="accent-color: var(--accent, #2b6cf6);">
 						<span>Generate Entity Framework CRUD service</span>
+					</label>
+				</div>
+				
+				<div id="dotnetZipFileOption" style="margin: 12px 0; display: none;">
+					<label style="display: flex; align-items: center; gap: 8px;">
+						<input type="checkbox" id="dotnetZipFile" style="accent-color: var(--accent, #2b6cf6);">
+						<span>Generate as ZIP file (separate file for each model)</span>
 					</label>
 				</div>
 			</div>
