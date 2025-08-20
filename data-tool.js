@@ -1338,8 +1338,13 @@
       const fieldTypes = analyzeTableFields(rows);
       const fields = Object.keys(fieldTypes);
       
-      // Clean table name: remove "data." prefix and any non-alphanumeric chars except underscore
-      const cleanTableName = tableName.replace(/^data\./, '').replace(/[^a-zA-Z0-9_]/g, '');
+      // Clean table name: remove "data." prefix and convert to TableName format (Pascal case)
+      let cleanTableName = tableName.replace(/^data\./, '');
+      // Convert to Pascal case: capitalize first letter and letters after underscores, dots, or hyphens
+      cleanTableName = cleanTableName.replace(/[^a-zA-Z0-9_]/g, '_') // Replace non-alphanumeric chars with underscores
+        .split(/[_\.\-\s]+/) // Split on underscores, dots, hyphens, spaces
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()) // Capitalize each word
+        .join(''); // Join without separators for Pascal case
       
       let sql = `-- Create table for ${cleanTableName}\n`;
       sql += `CREATE TABLE ${cleanTableName} (\n`;
