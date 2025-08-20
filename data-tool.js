@@ -1768,27 +1768,41 @@ namespace {{NAMESPACE}}.Extensions
       if (!configDiv || !listDiv) return;
       
       const links = designerState.links || [];
-      if (links.length === 0) {
-        configDiv.style.display = 'none';
-        return;
-      }
       
       listDiv.innerHTML = '';
       
+      if (links.length === 0) {
+        // Show helpful message when no relationships exist
+        listDiv.innerHTML = `
+          <div style="padding: 16px; text-align: center; color: var(--text-muted, #888); border: 2px dashed var(--border); border-radius: 4px; background: var(--bg-secondary, var(--bg));">
+            <div style="margin-bottom: 8px; font-size: 14px;">
+              <strong>No relationships configured yet</strong>
+            </div>
+            <div style="font-size: 12px; line-height: 1.4;">
+              To create foreign key relationships:<br>
+              1. Go to the <strong>Designer</strong> tab<br>
+              2. Drag from one table's field to another table's field<br>
+              3. Return here to configure the relationship type
+            </div>
+          </div>
+        `;
+        return;
+      }
+      
       links.forEach((link, index) => {
         const relationshipDiv = document.createElement('div');
-        relationshipDiv.style.cssText = 'margin: 8px 0; padding: 8px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg);';
+        relationshipDiv.style.cssText = 'margin: 8px 0; padding: 12px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-secondary, var(--bg)); box-shadow: 0 1px 3px rgba(0,0,0,0.1);';
         
         const leftTable = tableDisplayName(link.leftTable);
         const rightTable = tableDisplayName(link.rightTable);
         
         relationshipDiv.innerHTML = `
-          <div style="margin-bottom: 8px; font-weight: bold; color: var(--text);">
+          <div style="margin-bottom: 12px; font-weight: bold; color: var(--text); font-size: 14px; padding: 4px 0; border-bottom: 1px solid var(--border);">
             ${leftTable}.${link.leftCol} ⟷ ${rightTable}.${link.rightCol}
           </div>
           <div style="display: flex; align-items: center; gap: 8px;">
-            <label style="color: var(--text);">Relationship type:</label>
-            <select class="relationship-type-select" data-link-index="${index}" style="padding: 4px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text);">
+            <label style="color: var(--text); font-weight: 500; min-width: 120px;">Relationship type:</label>
+            <select class="relationship-type-select" data-link-index="${index}" style="flex: 1; padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text); font-size: 13px;">
               <option value="one-to-many">One-to-Many (${leftTable} → many ${rightTable})</option>
               <option value="many-to-one">Many-to-One (many ${leftTable} → ${rightTable})</option>
               <option value="many-to-many">Many-to-Many (${leftTable} ⟷ ${rightTable})</option>
@@ -1806,7 +1820,7 @@ namespace {{NAMESPACE}}.Extensions
         } else if (link.fkSide === 'right') {
           select.value = 'one-to-many';
         } else {
-          select.value = 'one-to-one'; // Default for no fkSide
+          select.value = 'one-to-many'; // Default to one-to-many instead of one-to-one
         }
       });
     }
@@ -1833,6 +1847,10 @@ namespace {{NAMESPACE}}.Extensions
         const configDiv = document.getElementById('dotnetRelationshipConfig');
         if (configDiv) {
           configDiv.style.display = isChecked ? 'block' : 'none';
+          // Refresh the relationship configuration when toggled
+          if (isChecked) {
+            populateRelationshipConfiguration();
+          }
         }
       };
       
