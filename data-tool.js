@@ -63,6 +63,53 @@
     return [rowishToObject(parsed)];
   }
 
+  // ---- Type inference for code generation ----
+  function inferDataType(values) {
+    // Analyze sample values to infer the best data type
+    const nonNullValues = values.filter(v => v != null);
+    if (nonNullValues.length === 0) return { sql: 'VARCHAR(255)', csharp: 'string?' };
+    
+    // Check if all are integers
+    const allIntegers = nonNullValues.every(v => 
+      typeof v === 'number' && Number.isInteger(v) && v >= -2147483648 && v <= 2147483647
+    );
+    if (allIntegers) return { sql: 'INT', csharp: 'int' };
+    
+    // Check if all are numbers (including decimals)
+    const allNumbers = nonNullValues.every(v => typeof v === 'number' && isFinite(v));
+    if (allNumbers) return { sql: 'DECIMAL(18,2)', csharp: 'decimal' };
+    
+    // Check if all are booleans
+    const allBooleans = nonNullValues.every(v => typeof v === 'boolean');
+    if (allBooleans) return { sql: 'BIT', csharp: 'bool' };
+    
+    // Check if all are dates (ISO strings)
+    const allDates = nonNullValues.every(v => 
+      typeof v === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(v)
+    );
+    if (allDates) return { sql: 'DATETIME2', csharp: 'DateTime' };
+    
+    // Default to string, but determine length
+    const maxLength = Math.max(...nonNullValues.map(v => String(v).length));
+    const sqlType = maxLength <= 50 ? `VARCHAR(${Math.max(50, maxLength)})` : 
+                   maxLength <= 255 ? `VARCHAR(${maxLength})` : 'TEXT';
+    
+    return { sql: sqlType, csharp: 'string' };
+  }
+
+  function analyzeTableFields(rows) {
+    // Get all unique field names and analyze their types
+    const fields = uniqueKeys(rows);
+    const fieldTypes = {};
+    
+    for (const field of fields) {
+      const values = rows.map(row => row[field]);
+      fieldTypes[field] = inferDataType(values);
+    }
+    
+    return fieldTypes;
+  }
+
   function renderPreview(obj) { const prev = document.getElementById('preview'); if (!prev) return; try { prev.textContent = JSON.stringify(obj, null, 2); } catch { prev.textContent = String(obj); } }
   function updateInputInfo() {
     try {
@@ -1284,11 +1331,238 @@
       }
     }
 
+    // ---- Code generation functions ----
+    function generateSQLTable(tableName, rows) {
+      if (!rows || rows.length === 0) return `-- No data for table ${tableName}`;
+      
+      const fieldTypes = analyzeTableFields(rows);
+      const fields = Object.keys(fieldTypes);
+      
+      let sql = `-- Create table for ${tableName}\n`;
+      sql += `CREATE TABLE [${tableName}] (\n`;
+      
+      const fieldDefs = fields.map(field => {
+        const cleanField = field.replace(/[^a-zA-Z0-9_]/g, '_');
+        const dataType = fieldTypes[field].sql;
+        return `    [${cleanField}] ${dataType} NULL`;
+      });
+      
+      sql += fieldDefs.join(',\n');
+      sql += '\n);\n';
+      
+      return sql;
+    }
+
+    function generateDotNetModel(tableName, rows, namespace, usePlural) {
+      if (!rows || rows.length === 0) return `// No data for model ${tableName}`;
+      
+      const fieldTypes = analyzeTableFields(rows);
+      const fields = Object.keys(fieldTypes);
+      
+      // Clean table name and apply naming convention
+      let className = tableName.replace(/^data\./, '').replace(/[^a-zA-Z0-9]/g, '');
+      className = className.charAt(0).toUpperCase() + className.slice(1);
+      
+      if (usePlural && !className.endsWith('s')) {
+        className += 's';
+      } else if (!usePlural && className.endsWith('s') && className.length > 1) {
+        className = className.slice(0, -1);
+      }
+      
+      let code = `using System;\nusing System.ComponentModel.DataAnnotations;\n\n`;
+      code += `namespace ${namespace}\n{\n`;
+      code += `    public class ${className}\n    {\n`;
+      
+      for (const field of fields) {
+        const cleanField = field.replace(/[^a-zA-Z0-9_]/g, '_');
+        const propName = cleanField.charAt(0).toUpperCase() + cleanField.slice(1);
+        const dataType = fieldTypes[field].csharp;
+        const nullable = dataType.includes('?') ? '' : '?';
+        
+        code += `        public ${dataType}${nullable} ${propName} { get; set; }\n`;
+      }
+      
+      code += `    }\n}\n`;
+      return code;
+    }
+
+    function generateApplicationDbContext(tableNames, namespace, usePlural) {
+      let className = usePlural ? 'DbSet' : 'DbSet';
+      let code = `using Microsoft.EntityFrameworkCore;\nusing ${namespace};\n\n`;
+      code += `namespace ${namespace}\n{\n`;
+      code += `    public class ApplicationDbContext : DbContext\n    {\n`;
+      code += `        public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : base(options)\n        {\n        }\n\n`;
+      
+      for (const tableName of tableNames) {
+        let cleanName = tableName.replace(/^data\./, '').replace(/[^a-zA-Z0-9]/g, '');
+        cleanName = cleanName.charAt(0).toUpperCase() + cleanName.slice(1);
+        
+        if (usePlural && !cleanName.endsWith('s')) {
+          cleanName += 's';
+        } else if (!usePlural && cleanName.endsWith('s') && cleanName.length > 1) {
+          cleanName = cleanName.slice(0, -1);
+        }
+        
+        code += `        public DbSet<${cleanName}> ${cleanName} { get; set; }\n`;
+      }
+      
+      code += `    }\n}\n`;
+      return code;
+    }
+
+    // Simple JSZip-like functionality using just JavaScript
+    function createZipContent(files) {
+      // For simplicity, we'll just concatenate files with separators
+      // In a real implementation, you'd use JSZip library
+      let content = '';
+      for (const [filename, fileContent] of Object.entries(files)) {
+        content += `\n// ===== ${filename} =====\n`;
+        content += fileContent;
+        content += `\n// ===== End of ${filename} =====\n`;
+      }
+      return content;
+    }
+
+    function showSQLTablesModal() {
+      const modal = document.getElementById('sqlTablesModal');
+      if (!modal) return;
+      
+      modal.classList.remove('hidden');
+      document.getElementById('sqlTablesFileName').focus();
+      
+      const cleanup = () => {
+        document.getElementById('sqlTablesSave')?.removeEventListener('click', onSave);
+        document.getElementById('sqlTablesCancel')?.removeEventListener('click', onCancel);
+        document.getElementById('sqlTablesModalClose')?.removeEventListener('click', onCancel);
+      };
+      
+      const onSave = () => {
+        const fileName = document.getElementById('sqlTablesFileName').value.trim();
+        if (!fileName) return;
+        
+        const groups = collectRootArrays();
+        if (groups.length === 0) {
+          showModal('No tables found. Please load JSON or XML data first.', 'No data');
+          return;
+        }
+        
+        if (groups.length === 1) {
+          // Single file
+          const sql = generateSQLTable(groups[0].name, groups[0].rows);
+          downloadBlob(sql, fileName, 'text/plain;charset=utf-8');
+        } else {
+          // Multiple files - create combined content
+          const files = {};
+          for (const group of groups) {
+            const tableName = group.name.replace(/^data\./, '') || 'table';
+            files[`${tableName}.sql`] = generateSQLTable(group.name, group.rows);
+          }
+          const zipContent = createZipContent(files);
+          const finalFileName = fileName.endsWith('.zip') ? fileName : fileName.replace(/\.[^.]*$/, '') + '_tables.sql';
+          downloadBlob(zipContent, finalFileName, 'text/plain;charset=utf-8');
+        }
+        
+        modal.classList.add('hidden');
+        cleanup();
+      };
+      
+      const onCancel = () => {
+        modal.classList.add('hidden');
+        cleanup();
+      };
+      
+      document.getElementById('sqlTablesSave')?.addEventListener('click', onSave);
+      document.getElementById('sqlTablesCancel')?.addEventListener('click', onCancel);
+      document.getElementById('sqlTablesModalClose')?.addEventListener('click', onCancel);
+    }
+
+    function showDotNetModelsModal() {
+      const modal = document.getElementById('dotnetModelsModal');
+      if (!modal) return;
+      
+      modal.classList.remove('hidden');
+      document.getElementById('dotnetNamespace').focus();
+      
+      const cleanup = () => {
+        document.getElementById('dotnetModelsSave')?.removeEventListener('click', onSave);
+        document.getElementById('dotnetModelsCancel')?.removeEventListener('click', onCancel);
+        document.getElementById('dotnetModelsModalClose')?.removeEventListener('click', onCancel);
+      };
+      
+      const onSave = () => {
+        const namespace = document.getElementById('dotnetNamespace').value.trim();
+        const usePlural = document.getElementById('dotnetPlural').checked;
+        const generateDbContext = document.getElementById('dotnetDbContext').checked;
+        
+        if (!namespace) {
+          showModal('Please enter a namespace.', 'Namespace required');
+          return;
+        }
+        
+        const groups = collectRootArrays();
+        if (groups.length === 0) {
+          showModal('No tables found. Please load JSON or XML data first.', 'No data');
+          return;
+        }
+        
+        const files = {};
+        const tableNames = [];
+        
+        for (const group of groups) {
+          const tableName = group.name.replace(/^data\./, '') || 'table';
+          tableNames.push(group.name);
+          const cleanName = tableName.charAt(0).toUpperCase() + tableName.slice(1).replace(/[^a-zA-Z0-9]/g, '');
+          const modelCode = generateDotNetModel(group.name, group.rows, namespace, usePlural);
+          files[`${cleanName}.cs`] = modelCode;
+        }
+        
+        if (generateDbContext) {
+          const dbContextCode = generateApplicationDbContext(tableNames, namespace, usePlural);
+          files['ApplicationDbContext.cs'] = dbContextCode;
+        }
+        
+        if (Object.keys(files).length === 1) {
+          // Single file
+          const [fileName, content] = Object.entries(files)[0];
+          downloadBlob(content, fileName, 'text/plain;charset=utf-8');
+        } else {
+          // Multiple files - create combined content
+          const zipContent = createZipContent(files);
+          downloadBlob(zipContent, 'models.cs', 'text/plain;charset=utf-8');
+        }
+        
+        modal.classList.add('hidden');
+        cleanup();
+      };
+      
+      const onCancel = () => {
+        modal.classList.add('hidden');
+        cleanup();
+      };
+      
+      document.getElementById('dotnetModelsSave')?.addEventListener('click', onSave);
+      document.getElementById('dotnetModelsCancel')?.addEventListener('click', onCancel);
+      document.getElementById('dotnetModelsModalClose')?.addEventListener('click', onCancel);
+    }
+
     // Clear storage & insert generator
     const clearStorageBtn=document.getElementById('clearStorageBtn');
     clearStorageBtn?.addEventListener('click', ()=>{ localStorage.clear(); alert('Local storage cleared.'); });
   const genInsertsBtn=document.getElementById('genInsertsBtn');
   genInsertsBtn?.addEventListener('click', ()=>{ if (!ensureDataOrWarn()) return; const rows=lastQueryRows.length ? lastQueryRows : loadedRows; if (!rows.length){ showModal('No rows to convert. Run a query or load data first.', 'Nothing to export'); return; } const tableName = prompt('Table name for INSERTs:', 'my_table'); if (!tableName) return; const sql = generateInsertSQL(rows, tableName); const rawEl=document.getElementById('resultsRaw'); if (rawEl) rawEl.textContent=sql; document.querySelector('#resultsTabs .tab[data-tab="raw"]')?.click(); });
+
+    // SQL Tables and .NET Models generators
+    const genTablesBtn = document.getElementById('genTablesBtn');
+    genTablesBtn?.addEventListener('click', () => {
+      if (!ensureDataOrWarn()) return;
+      showSQLTablesModal();
+    });
+
+    const genModelsBtn = document.getElementById('genModelsBtn');
+    genModelsBtn?.addEventListener('click', () => {
+      if (!ensureDataOrWarn()) return;
+      showDotNetModelsModal();
+    });
 
     // Results filter and downloads
     const filter=document.getElementById('resultsFilter');
