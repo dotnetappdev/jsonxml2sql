@@ -1,0 +1,100 @@
+=== CRUD_INTERFACE ===
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+
+namespace {{NAMESPACE}}.Interfaces
+{
+    public interface I{{CLASS_NAME}}Interface
+    {
+        Task<IEnumerable<{{CLASS_NAME}}>> GetAllAsync();
+        Task<{{CLASS_NAME}}?> GetByIdAsync(int id);
+        Task<{{CLASS_NAME}}> CreateAsync({{CLASS_NAME}} entity);
+        Task<{{CLASS_NAME}}> UpdateAsync({{CLASS_NAME}} entity);
+        Task<bool> DeleteAsync(int id);
+        Task<bool> ExistsAsync(int id);
+    }
+}
+
+=== CRUD_SERVICE ===
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using Microsoft.EntityFrameworkCore;
+using {{NAMESPACE}}.Interfaces;
+
+namespace {{NAMESPACE}}.Services
+{
+    public class {{CLASS_NAME}}Service : I{{CLASS_NAME}}Interface
+    {
+        private readonly ApplicationDbContext _context;
+
+        public {{CLASS_NAME}}Service(ApplicationDbContext context)
+        {
+            _context = context;
+        }
+
+        public async Task<IEnumerable<{{CLASS_NAME}}>> GetAllAsync()
+        {
+            return await _context.{{CLASS_NAME}}s.ToListAsync();
+        }
+
+        public async Task<{{CLASS_NAME}}?> GetByIdAsync(int id)
+        {
+            return await _context.{{CLASS_NAME}}s.FindAsync(id);
+        }
+
+        public async Task<{{CLASS_NAME}}> CreateAsync({{CLASS_NAME}} entity)
+        {
+            _context.{{CLASS_NAME}}s.Add(entity);
+            await _context.SaveChangesAsync();
+            return entity;
+        }
+
+        public async Task<{{CLASS_NAME}}> UpdateAsync({{CLASS_NAME}} entity)
+        {
+            _context.Entry(entity).State = EntityState.Modified;
+            await _context.SaveChangesAsync();
+            return entity;
+        }
+
+        public async Task<bool> DeleteAsync(int id)
+        {
+            var entity = await _context.{{CLASS_NAME}}s.FindAsync(id);
+            if (entity == null)
+            {
+                return false;
+            }
+
+            _context.{{CLASS_NAME}}s.Remove(entity);
+            await _context.SaveChangesAsync();
+            return true;
+        }
+
+        public async Task<bool> ExistsAsync(int id)
+        {
+            return await _context.{{CLASS_NAME}}s.AnyAsync(e => e.{{PRIMARY_KEY_FIELD}} == id);
+        }
+    }
+}
+
+=== DEPENDENCY_INJECTION ===
+using {{NAMESPACE}}.Interfaces;
+using {{NAMESPACE}}.Services;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace {{NAMESPACE}}.Extensions
+{
+    public static class ServiceCollectionExtensions
+    {
+        public static IServiceCollection Add{{NAMESPACE_SUFFIX}}Services(this IServiceCollection services)
+        {
+{{SERVICE_REGISTRATIONS}}
+            return services;
+        }
+    }
+}
+
+=== SERVICE_REGISTRATION_LINE ===
+            services.AddScoped<I{{CLASS_NAME}}Interface, {{CLASS_NAME}}Service>();

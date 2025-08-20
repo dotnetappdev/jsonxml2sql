@@ -111,60 +111,83 @@
   }
 
   // ---- Code Generation Templates ----
-  const templates = {
-    crudInterface: (className, namespace) => `using System;
+  let templateCache = null;
+  
+  async function loadTemplates() {
+    if (templateCache) return templateCache;
+    
+    try {
+      const response = await fetch('templates.txt');
+      const content = await response.text();
+      
+      const templates = {};
+      const sections = content.split('=== ').filter(s => s.trim());
+      
+      for (const section of sections) {
+        const lines = section.split('\n');
+        const templateName = lines[0].split(' ===')[0].trim();
+        const templateContent = lines.slice(1).join('\n').trim();
+        templates[templateName] = templateContent;
+      }
+      
+      templateCache = templates;
+      return templates;
+    } catch (error) {
+      console.error('Failed to load templates:', error);
+      // Fallback to inline templates if loading fails
+      return {
+        CRUD_INTERFACE: `using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 
-namespace ${namespace}.Interfaces
+namespace {{NAMESPACE}}.Interfaces
 {
-    public interface I${className}Service
+    public interface I{{CLASS_NAME}}Interface
     {
-        Task<IEnumerable<${className}>> GetAllAsync();
-        Task<${className}?> GetByIdAsync(int id);
-        Task<${className}> CreateAsync(${className} entity);
-        Task<${className}> UpdateAsync(${className} entity);
+        Task<IEnumerable<{{CLASS_NAME}}>> GetAllAsync();
+        Task<{{CLASS_NAME}}?> GetByIdAsync(int id);
+        Task<{{CLASS_NAME}}> CreateAsync({{CLASS_NAME}} entity);
+        Task<{{CLASS_NAME}}> UpdateAsync({{CLASS_NAME}} entity);
         Task<bool> DeleteAsync(int id);
         Task<bool> ExistsAsync(int id);
     }
 }`,
-
-    crudService: (className, namespace, primaryKeyField = 'Id') => `using System;
+        CRUD_SERVICE: `using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
-using ${namespace}.Interfaces;
+using {{NAMESPACE}}.Interfaces;
 
-namespace ${namespace}.Services
+namespace {{NAMESPACE}}.Services
 {
-    public class ${className}Service : I${className}Service
+    public class {{CLASS_NAME}}Service : I{{CLASS_NAME}}Interface
     {
         private readonly ApplicationDbContext _context;
 
-        public ${className}Service(ApplicationDbContext context)
+        public {{CLASS_NAME}}Service(ApplicationDbContext context)
         {
             _context = context;
         }
 
-        public async Task<IEnumerable<${className}>> GetAllAsync()
+        public async Task<IEnumerable<{{CLASS_NAME}}>> GetAllAsync()
         {
-            return await _context.${className}s.ToListAsync();
+            return await _context.{{CLASS_NAME}}s.ToListAsync();
         }
 
-        public async Task<${className}?> GetByIdAsync(int id)
+        public async Task<{{CLASS_NAME}}?> GetByIdAsync(int id)
         {
-            return await _context.${className}s.FindAsync(id);
+            return await _context.{{CLASS_NAME}}s.FindAsync(id);
         }
 
-        public async Task<${className}> CreateAsync(${className} entity)
+        public async Task<{{CLASS_NAME}}> CreateAsync({{CLASS_NAME}} entity)
         {
-            _context.${className}s.Add(entity);
+            _context.{{CLASS_NAME}}s.Add(entity);
             await _context.SaveChangesAsync();
             return entity;
         }
 
-        public async Task<${className}> UpdateAsync(${className} entity)
+        public async Task<{{CLASS_NAME}}> UpdateAsync({{CLASS_NAME}} entity)
         {
             _context.Entry(entity).State = EntityState.Modified;
             await _context.SaveChangesAsync();
@@ -173,44 +196,83 @@ namespace ${namespace}.Services
 
         public async Task<bool> DeleteAsync(int id)
         {
-            var entity = await _context.${className}s.FindAsync(id);
+            var entity = await _context.{{CLASS_NAME}}s.FindAsync(id);
             if (entity == null)
             {
                 return false;
             }
 
-            _context.${className}s.Remove(entity);
+            _context.{{CLASS_NAME}}s.Remove(entity);
             await _context.SaveChangesAsync();
             return true;
         }
 
         public async Task<bool> ExistsAsync(int id)
         {
-            return await _context.${className}s.AnyAsync(e => e.${primaryKeyField} == id);
+            return await _context.{{CLASS_NAME}}s.AnyAsync(e => e.{{PRIMARY_KEY_FIELD}} == id);
         }
     }
 }`,
-
-    dependencyInjection: (classNames, namespace) => {
-      const registrations = classNames.map(className => 
-        `            services.AddScoped<I${className}Service, ${className}Service>();`
-      ).join('\n');
-      
-      return `using ${namespace}.Interfaces;
-using ${namespace}.Services;
+        DEPENDENCY_INJECTION: `using {{NAMESPACE}}.Interfaces;
+using {{NAMESPACE}}.Services;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace ${namespace}.Extensions
+namespace {{NAMESPACE}}.Extensions
 {
     public static class ServiceCollectionExtensions
     {
-        public static IServiceCollection Add${namespace.split('.').pop()}Services(this IServiceCollection services)
+        public static IServiceCollection Add{{NAMESPACE_SUFFIX}}Services(this IServiceCollection services)
         {
-${registrations}
+{{SERVICE_REGISTRATIONS}}
             return services;
         }
     }
-}`;
+}`,
+        SERVICE_REGISTRATION_LINE: `            services.AddScoped<I{{CLASS_NAME}}Interface, {{CLASS_NAME}}Service>();`
+      };
+    }
+  }
+  
+  function replaceTemplatePlaceholders(template, placeholders) {
+    let result = template;
+    for (const [key, value] of Object.entries(placeholders)) {
+      const regex = new RegExp(`{{${key}}}`, 'g');
+      result = result.replace(regex, value);
+    }
+    return result;
+  }
+  
+  const templates = {
+    crudInterface: async (className, namespace) => {
+      const templateData = await loadTemplates();
+      return replaceTemplatePlaceholders(templateData.CRUD_INTERFACE, {
+        CLASS_NAME: className,
+        NAMESPACE: namespace
+      });
+    },
+
+    crudService: async (className, namespace, primaryKeyField = 'Id') => {
+      const templateData = await loadTemplates();
+      return replaceTemplatePlaceholders(templateData.CRUD_SERVICE, {
+        CLASS_NAME: className,
+        NAMESPACE: namespace,
+        PRIMARY_KEY_FIELD: primaryKeyField
+      });
+    },
+
+    dependencyInjection: async (classNames, namespace) => {
+      const templateData = await loadTemplates();
+      const registrations = classNames.map(className => 
+        replaceTemplatePlaceholders(templateData.SERVICE_REGISTRATION_LINE, {
+          CLASS_NAME: className
+        })
+      ).join('\n');
+      
+      return replaceTemplatePlaceholders(templateData.DEPENDENCY_INJECTION, {
+        NAMESPACE: namespace,
+        NAMESPACE_SUFFIX: namespace.split('.').pop(),
+        SERVICE_REGISTRATIONS: registrations
+      });
     }
   };
 
@@ -1778,7 +1840,7 @@ ${registrations}
       document.getElementById('dotnetForeignKeys')?.addEventListener('change', onForeignKeyToggle);
       onForeignKeyToggle(); // Initialize visibility
       
-      const onSave = () => {
+      const onSave = async () => {
         const namespace = document.getElementById('dotnetNamespace').value.trim();
         const usePlural = document.getElementById('dotnetPlural').checked;
         const generateDbContext = document.getElementById('dotnetDbContext').checked;
@@ -1875,12 +1937,12 @@ ${registrations}
               }
             }
             
-            files[`Interfaces/I${className}Service.cs`] = templates.crudInterface(className, namespace);
-            files[`Services/${className}Service.cs`] = templates.crudService(className, namespace, primaryKeyField);
+            files[`Interfaces/I${className}Interface.cs`] = await templates.crudInterface(className, namespace);
+            files[`Services/${className}Service.cs`] = await templates.crudService(className, namespace, primaryKeyField);
           }
           
           // Generate dependency injection extension
-          files['Extensions/ServiceCollectionExtensions.cs'] = templates.dependencyInjection(classNames, namespace);
+          files['Extensions/ServiceCollectionExtensions.cs'] = await templates.dependencyInjection(classNames, namespace);
         }
         
         if (Object.keys(files).length === 1) {
