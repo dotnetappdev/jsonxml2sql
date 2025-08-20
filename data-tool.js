@@ -1254,7 +1254,11 @@
       switchTo(last);
       for (const btn of tabButtons) btn.addEventListener('click', ()=>{
         const tab = btn.dataset.tab;
-  if (btn.id === 'docsTab') { window.open('readme.html', '_blank', 'noopener'); return; }
+  if (btn.id === 'docsTab') {
+    const githubDocsUrl = 'https://github.com/dotnetappdev/jsonxml2sql#readme';
+    window.open(githubDocsUrl, '_blank', 'noopener');
+    return;
+  }
         if (!tab || (tab !== 'editor' && tab !== 'designer')) return;
         switchTo(tab);
       });
