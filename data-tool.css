@@ -15,6 +15,10 @@
 	flex-wrap: nowrap; /* force single line */
 	overflow-x: auto; /* allow horizontal scroll on narrow screens */
 }
+/* Dark mode: toolbar honors theme */
+.theme-dark .toolbar.ribbon-bar { background: var(--panel); color: var(--text); }
+.theme-dark .brand-title { color: var(--text); }
+.theme-dark .brand-desc { color: var(--muted); }
 /* Theme switch (toolbar) */
 .theme-switch {
 	width: 44px;
@@ -133,16 +137,26 @@ body {
 
 .btn {
 	padding: 8px 12px;
-	border: 1px solid var(--border);
-	background: var(--panel);
-	color: var(--text);
+	border: 1px solid #3b82f6;
+	background: #1e3a8a;
+	color: #dbeafe;
 	border-radius: 8px;
 	cursor: pointer;
+	transition: background 0.18s, color 0.18s;
 }
-.btn.primary { border-color: #1e3a8a; background: var(--panel); color: #dbeafe; }
-.btn.danger { border-color: #7f1d1d; background: var(--panel); color: #fee2e2; }
-.btn.success { border-color: #14532d; background: #0b1d12; color: #dcfce7; }
-.btn:focus { outline: 2px solid var(--primary); outline-offset: 2px; }
+.btn:focus {
+	outline: 2px solid #3b82f6;
+	outline-offset: 2px;
+}
+.btn:hover, .btn:active {
+	background: #2563eb;
+	color: #fff;
+}
+.btn.primary, .btn.danger, .btn.success {
+	border-color: #3b82f6;
+	background: #1e3a8a;
+	color: #dbeafe;
+}
 
 .muted { color: var(--muted); }
 .status-row { padding: 6px 2px; }
@@ -189,6 +203,14 @@ body {
 	background: #444;
 	outline: none;
 }
+/* Dark mode: menu buttons honor theme variables */
+.theme-dark .menu-btn {
+	background: var(--panel);
+	color: var(--text);
+}
+.theme-dark .menu-btn:hover, .theme-dark .menu-btn:focus {
+	background: #2a2a2a;
+}
 
 @media (max-width: 700px) {
 	.toolbar {
@@ -233,7 +255,60 @@ textarea {
 }
 .sql-actions { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
 .sql-actions .btn { padding: 6px 10px; border-radius: 8px; }
+/* Light mode keeps current colors */
 .btn.primary { background: #1e3a8a; color: #dbeafe; border: 1px solid #3b82f6; }
+/* Dark mode: use themed palette */
+.theme-dark .btn { background: var(--panel); color: var(--text); border-color: var(--border); }
+.theme-dark .btn.primary { background: #0f1a2e; color: #dbeafe; border-color: var(--primary); }
+.theme-dark .btn.danger { background: #2a1616; color: #fee2e2; border-color: #7f1d1d; }
+.theme-dark .btn.success { background: #0b1d12; color: #dcfce7; border-color: #14532d; }
+
+/* In dark mode, make SQL action buttons (Run, Generate Insert, Clear Storage, Generate SQL)
+   match the Sample JSON button colors (neutral panel/text) */
+.theme-dark .sql-actions .btn,
+.theme-dark .sql-actions .btn.primary,
+.theme-dark .sql-actions .btn.danger,
+.theme-dark .sql-actions .btn.success {
+	background: var(--panel);
+	color: var(--text);
+	border-color: var(--border);
+}
+.theme-dark .sql-actions .btn:hover,
+.theme-dark .sql-actions .btn:active,
+.theme-dark .sql-actions .btn:focus {
+	background: #2a2a2a;
+	color: var(--text);
+}
+
+/* Dark mode: make Designer's Generate SQL button match Sample JSON styling */
+.theme-dark #designerGenerateSql.btn,
+.theme-dark #designerGenerateSql.btn.primary {
+	background: var(--panel);
+	color: var(--text);
+	border-color: var(--border);
+}
+.theme-dark #designerGenerateSql.btn:hover,
+.theme-dark #designerGenerateSql.btn:active,
+.theme-dark #designerGenerateSql.btn:focus {
+	background: #2a2a2a;
+	color: var(--text);
+}
+
+/* Dark mode: unify all buttons in the Designer tab with neutral styling (match editor group) */
+.theme-dark #panel-designer .btn,
+.theme-dark #panel-designer .btn.primary,
+.theme-dark #panel-designer .btn.danger,
+.theme-dark #panel-designer .btn.success {
+	background: var(--panel);
+	color: var(--text);
+	border-color: var(--border);
+}
+.theme-dark #panel-designer .btn:hover,
+.theme-dark #panel-designer .btn:active,
+.theme-dark #panel-designer .btn:focus {
+	background: #2a2a2a;
+	color: var(--text);
+}
 
 .left .pane-header, .right .pane-header {
 	display: flex;
@@ -269,6 +344,31 @@ textarea {
 	cursor: pointer;
 }
 .tab.active { outline: 2px solid var(--primary); }
+
+/* Light mode: make Editor/Designer tabs match blue button styling */
+.theme-light #editorTabs .tab {
+	background: #1e3a8a;
+	color: #dbeafe;
+	border-color: #3b82f6;
+}
+.theme-light #editorTabs .tab:hover,
+.theme-light #editorTabs .tab:active,
+.theme-light #editorTabs .tab:focus {
+	background: #2563eb;
+	color: #fff;
+}
+/* Apply same light-mode styling to Results tabs */
+.theme-light #resultsTabs .tab {
+	background: #1e3a8a;
+	color: #dbeafe;
+	border-color: #3b82f6;
+}
+.theme-light #resultsTabs .tab:hover,
+.theme-light #resultsTabs .tab:active,
+.theme-light #resultsTabs .tab:focus {
+	background: #2563eb;
+	color: #fff;
+}
 
 .tab-panel { display: none; }
 .tab-panel.active { display: block; }
@@ -389,6 +489,9 @@ tbody tr:nth-child(odd) { background: var(--row-alt); }
 .designer-tables { position: absolute; inset: 0; padding: 10px; }
 .designer-table { position: absolute; width: 280px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); box-shadow: 0 2px 6px rgba(0,0,0,0.08); }
 .designer-table .dt-head { font-weight: 600; padding: 8px 10px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; background: var(--accent, #2563eb); color: #fff; cursor: move; border-top-left-radius: 6px; border-top-right-radius: 6px; }
+/* Dark mode: ensure designer card surfaces and text use theme colors */
+.theme-dark .designer-table { background: var(--bg); color: var(--text); }
+.theme-dark .designer-table .dt-body { background: var(--panel); }
 .designer-table .dt-head .dt-title { font-size: 13.5px; }
 .designer-table .dt-body { max-height: 260px; overflow: auto; background: var(--bg); }
 .designer-table .dt-fields { list-style: none; margin: 0; padding: 4px 0; }
@@ -406,6 +509,7 @@ tbody tr:nth-child(odd) { background: var(--row-alt); }
 .designer-field-pin.pin-left { margin-left: 6px; }
 .designer-field-pin.pin-right { margin-left: auto; margin-right: 6px; }
 .designer-field { flex: 1 1 auto; font-size: 14px; line-height: 1.7; cursor: default; color: var(--text); }
+.theme-dark .designer-field { color: var(--text); }
 .designer-field { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .designer-field[data-type="number"] { color: var(--text); }
 .designer-link-preview { stroke: var(--accent, #2b6cf6); stroke-width: 3; fill: none; opacity: 0.5; }
@@ -441,6 +545,7 @@ tbody tr:nth-child(odd) { background: var(--row-alt); }
 .designer-table[data-path="__output__"] .dt-fields li { cursor: grab; }
 .designer-table[data-path="__output__"] .dt-fields li:active { cursor: grabbing; }
 .designer-table[data-path="__output__"] .dt-fields li:hover { background: rgba(86,156,214,0.12); border-bottom-color: var(--border); }
+.theme-dark .designer-table[data-path="__output__"] .dt-fields li:hover { background: rgba(86,156,214,0.14); }
 
 /* Output columns manager & SQL preview above designer */
 .designer-sql-preview { margin-bottom: 8px; }
