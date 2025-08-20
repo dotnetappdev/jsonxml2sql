@@ -1341,14 +1341,47 @@
       let sql = `-- Create table for ${tableName}\n`;
       sql += `CREATE TABLE [${tableName}] (\n`;
       
+      // Find primary key fields (only exact field name 'id' case-insensitive)
+      const idFields = fields.filter(field => field.toLowerCase() === 'id');
+      
       const fieldDefs = fields.map(field => {
         const cleanField = field.replace(/[^a-zA-Z0-9_]/g, '_');
         const dataType = fieldTypes[field].sql;
-        return `    [${cleanField}] ${dataType} NULL`;
+        const isIdField = field.toLowerCase() === 'id';
+        const isPrimaryKey = isIdField && idFields.length === 1;
+        
+        if (isPrimaryKey) {
+          return `    [${cleanField}] ${dataType} NOT NULL PRIMARY KEY`;
+        } else if (isIdField) {
+          return `    [${cleanField}] ${dataType} NOT NULL`;
+        } else {
+          return `    [${cleanField}] ${dataType} NULL`;
+        }
       });
       
       sql += fieldDefs.join(',\n');
-      sql += '\n);\n';
+      sql += '\n);\n\n';
+      
+      // Add INSERT statements for data importation
+      if (rows.length > 0) {
+        sql += `-- Insert data for ${tableName}\n`;
+        const cols = fields.map(f => f.replace(/[^a-zA-Z0-9_]/g, '_'));
+        const sqlEscape = (v) => {
+          if (v == null) return 'NULL';
+          if (typeof v === 'number') return isFinite(v) ? String(v) : 'NULL';
+          if (typeof v === 'boolean') return v ? 'TRUE' : 'FALSE';
+          if (typeof v === 'object') v = JSON.stringify(v);
+          return '\'' + String(v).replace(/'/g, "''") + '\'';
+        };
+        
+        const insertHeader = `INSERT INTO [${tableName}] ([${cols.join('], [')}]) VALUES`;
+        const insertValues = rows.map(row => {
+          const values = fields.map(field => sqlEscape(row[field]));
+          return `    (${values.join(', ')})`;
+        });
+        
+        sql += insertHeader + '\n' + insertValues.join(',\n') + ';\n';
+      }
       
       return sql;
     }
