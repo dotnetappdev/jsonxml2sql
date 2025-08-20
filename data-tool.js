@@ -12,56 +12,18 @@
   let lastQueryRows = [];
   let monacoEditor = null;
 
-  // Expose core helpers/state
-  window.rowishToObject = rowishToObject;
-  window.uniqueKeys = uniqueKeys;
-  window.getByPath = getByPath;
+  // Bring in shared utilities from data-utils.js
+  const { rowishToObject, uniqueKeys, getByPath, debounce, isPlainObject, safeJsonParse } = window;
+
+  // Expose runtime state (for debugging/inspection)
   window.loadedRows = loadedRows;
   window.loadedRoot = loadedRoot;
   window.currentFromSource = currentFromSource;
   window.lastQueryRows = lastQueryRows;
 
-  // ---- Theme ----
-  function initTheme() {
-    const root = document.documentElement;
-    const saved = localStorage.getItem('jsonxml2sql_theme') || 'light';
-    root.classList.toggle('theme-light', saved === 'light');
-    root.classList.toggle('theme-dark', saved === 'dark');
-    const sw = document.getElementById('themeSwitch');
-    const label = document.querySelector('.theme-toggle-label');
-    if (sw) {
-      sw.setAttribute('data-on', String(saved === 'dark'));
-      sw.setAttribute('aria-checked', String(saved === 'dark'));
-    }
-    if (label) label.textContent = saved === 'dark' ? 'Dark mode' : 'Light mode';
-  }
-  function initThemeSwitch() {
-    const themeSwitch = document.getElementById('themeSwitch'); if (!themeSwitch) return;
-    const toolbar = document.getElementById('mainToolbar');
-    const apply = (on) => {
-      const root = document.documentElement;
-      localStorage.setItem('jsonxml2sql_theme', on ? 'dark' : 'light');
-      root.classList.toggle('theme-dark', on);
-      root.classList.toggle('theme-light', !on);
-      themeSwitch.setAttribute('data-on', on ? 'true' : 'false');
-      themeSwitch.setAttribute('aria-checked', on ? 'true' : 'false');
-      toolbar?.classList.toggle('dark', on);
-      toolbar?.querySelector('.brand-title')?.classList.toggle('dark', on);
-      toolbar?.querySelector('.brand-desc')?.classList.toggle('dark', on);
-      toolbar?.querySelector('.theme-toggle-label')?.classList.toggle('dark', on);
-    };
-    const isOn = (localStorage.getItem('jsonxml2sql_theme') || 'light') === 'dark';
-    apply(isOn);
-    themeSwitch.addEventListener('click', () => apply(themeSwitch.getAttribute('data-on') !== 'true'));
-    themeSwitch.addEventListener('keydown', (e) => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); apply(themeSwitch.getAttribute('data-on') !== 'true'); } });
-  }
+  // Theme moved to data-theme.js; initTheme and initThemeSwitch provided globally.
 
-  // ---- Utils ----
-  function debounce(fn, wait) { let t; return function () { clearTimeout(t); t = setTimeout(fn, wait); }; }
-  function isPlainObject(o) { return o && typeof o === 'object' && !Array.isArray(o); }
-  function rowishToObject(v) { if (v == null) return {}; if (Array.isArray(v)) return { value: v.map(rowishToObject) }; if (typeof v === 'object') return v; return { value: v }; }
-  function uniqueKeys(rows) { const set = new Set(); for (const r of rows || []) for (const k of Object.keys(r || {})) set.add(k); return Array.from(set.values()); }
-  function safeJsonParse(text) { try { return JSON.parse(text); } catch { return null; } }
+  // ---- Utils (moved to data-utils.js globals) ----
 
   function xmlToJson(xmlText) {
     try {
@@ -215,7 +177,6 @@
   }
 
   function compare(a, op, b){ switch(op){ case '=': return a===b; case '!=': return a!==b; case '>': return a>b; case '>=': return a>=b; case '<': return a<b; case '<=': return a<=b; default: return false; } }
-  function getByPath(obj, path){ if(path==='*' || path==null) return obj; if (typeof path !== 'string') return undefined; const parts=path.split('.'); let cur=obj; for (const p of parts){ if (cur==null) return undefined; if (/^\d+$/.test(p)){ cur = cur[Number(p)]; continue; } if (Object.prototype.hasOwnProperty.call(cur, p)){ cur=cur[p]; continue; } const lc=p.toLowerCase(); const found=Object.keys(cur).find(k=>k.toLowerCase()===lc); cur = found!==undefined ? cur[found] : undefined; } return cur; }
   function evalExpr(expr,row,scopePrefix){ switch(expr.type){ case 'lit': return expr.value; case 'col': { let path=expr.name; if (path==='data') return row; if (path.startsWith('data.')) path=path.slice(5); if (scopePrefix && path.startsWith(scopePrefix + '.')) path = path.slice(scopePrefix.length+1); return getByPath(row, path); } case 'cmp': return compare(evalExpr(expr.left,row,scopePrefix), expr.op, evalExpr(expr.right,row,scopePrefix)); case 'and': return !!(evalExpr(expr.left,row,scopePrefix) && evalExpr(expr.right,row,scopePrefix)); case 'or': return !!(evalExpr(expr.left,row,scopePrefix) || evalExpr(expr.right,row,scopePrefix)); default: return null; } }
 
   function resolveSourceRows(source){ const _rows = loadedRows; const _root = loadedRoot; if (!source || source==='data') return _rows; if (!_root) return _rows; const val = getByPath({data:_root}, source); if (typeof val === 'undefined') return []; if (Array.isArray(val)) return val.map(rowishToObject); if (isPlainObject(val)){ for (const k of Object.keys(val)) if (Array.isArray(val[k])) return val[k].map(rowishToObject); return [rowishToObject(val)]; } return [{ value: val }]; }
@@ -1077,6 +1038,7 @@
   }
   function initDesignerEvents(){
     document.getElementById('designerGenerateSql')?.addEventListener('click', ()=>{
+      if (!ensureDataOrWarn()) return;
       const sql = buildSqlFromDesigner();
       if (monacoEditor){ monacoEditor.setValue(sql); }
       computeAndRun(sql);
@@ -1195,6 +1157,33 @@
       if (status) status.textContent = 'Error: ' + e.message;
     }
   }
+  // Modal helpers (top-level so all handlers can use them)
+  function showModal(message, title='Notice'){
+    try{
+      const modal=document.getElementById('appModal'); if(!modal) return alert(message);
+      modal.classList.remove('hidden');
+      const body=document.getElementById('appModalBody'); if(body) body.innerHTML = message;
+      const ttl=document.getElementById('appModalTitle'); if(ttl) ttl.textContent = title;
+      const onClose=()=>{ modal.classList.add('hidden'); cleanup(); };
+      const cleanup=()=>{
+        document.getElementById('appModalOk')?.removeEventListener('click', onClose);
+        document.getElementById('appModalClose')?.removeEventListener('click', onClose);
+      };
+      document.getElementById('appModalOk')?.addEventListener('click', onClose);
+      document.getElementById('appModalClose')?.addEventListener('click', onClose);
+    }catch{ alert(message); }
+  }
+  function ensureDataOrWarn(){
+    try{
+      const hasAny = (loadedRows && loadedRows.length) || (Array.isArray(loadedRoot) ? loadedRoot.length : !!loadedRoot);
+      if (!hasAny){
+        showModal('<p><strong>No data loaded.</strong></p><p>Please paste JSON or XML on the left and click <em>Load</em> before running queries.</p>', 'Data not loaded');
+        return false;
+      }
+      return true;
+    } catch { return true; }
+  }
+
   function attachEvents(){
     // Left pane load/clear
     const loadBtn=document.getElementById('loadBtn');
@@ -1213,7 +1202,7 @@
 
     // Run / Clear SQL
     const runBtn=document.getElementById('runSqlBtn');
-    runBtn?.addEventListener('click', ()=>{ const sql = monacoEditor ? monacoEditor.getValue() : ''; computeAndRun(sql); });
+    runBtn?.addEventListener('click', ()=>{ if (!ensureDataOrWarn()) return; const sql = monacoEditor ? monacoEditor.getValue() : ''; computeAndRun(sql); });
     const clearSqlBtn=document.getElementById('clearSqlBtn');
     clearSqlBtn?.addEventListener('click', ()=>{ if (monacoEditor) monacoEditor.setValue(''); const status=document.getElementById('sqlStatus'); if (status) status.textContent=''; renderSingleTableView(); renderTable([]); const rawEl=document.getElementById('resultsRaw'); if (rawEl) rawEl.textContent=''; const treeEl=document.getElementById('resultsTree'); if (treeEl) treeEl.innerHTML=''; const sel=document.getElementById('resultsFilter'); if (sel) sel.value='ALL'; lastQueryRows=[]; window.lastQueryRows=lastQueryRows; });
 
@@ -1276,8 +1265,8 @@
     // Clear storage & insert generator
     const clearStorageBtn=document.getElementById('clearStorageBtn');
     clearStorageBtn?.addEventListener('click', ()=>{ localStorage.clear(); alert('Local storage cleared.'); });
-    const genInsertsBtn=document.getElementById('genInsertsBtn');
-    genInsertsBtn?.addEventListener('click', ()=>{ const rows=lastQueryRows.length ? lastQueryRows : loadedRows; if (!rows.length){ alert('No rows to convert. Run a query or load data first.'); return; } const tableName = prompt('Table name for INSERTs:', 'my_table'); if (!tableName) return; const sql = generateInsertSQL(rows, tableName); const rawEl=document.getElementById('resultsRaw'); if (rawEl) rawEl.textContent=sql; document.querySelector('#resultsTabs .tab[data-tab="raw"]')?.click(); });
+  const genInsertsBtn=document.getElementById('genInsertsBtn');
+  genInsertsBtn?.addEventListener('click', ()=>{ if (!ensureDataOrWarn()) return; const rows=lastQueryRows.length ? lastQueryRows : loadedRows; if (!rows.length){ showModal('No rows to convert. Run a query or load data first.', 'Nothing to export'); return; } const tableName = prompt('Table name for INSERTs:', 'my_table'); if (!tableName) return; const sql = generateInsertSQL(rows, tableName); const rawEl=document.getElementById('resultsRaw'); if (rawEl) rawEl.textContent=sql; document.querySelector('#resultsTabs .tab[data-tab="raw"]')?.click(); });
 
     // Results filter and downloads
     const filter=document.getElementById('resultsFilter');
@@ -1287,7 +1276,7 @@
 
   function generateInsertSQL(rows, tableName){ const cols=uniqueKeys(rows).sort(); const sqlEscape=(v)=>{ if (v==null) return 'NULL'; if (typeof v==='number') return isFinite(v)? String(v) : 'NULL'; if (typeof v==='boolean') return v? 'TRUE':'FALSE'; if (typeof v==='object') v=JSON.stringify(v); return '\'' + String(v).replace(/'/g, "''") + '\''; }; const header=`INSERT INTO ${tableName} (${cols.join(', ')}) VALUES`; const values=rows.map(r=>`(${cols.map(c=>sqlEscape(r[c])).join(', ')})`); return header + '\n' + values.join(',\n') + ';'; }
 
-  function init(){ attachEvents(); initThemeSwitch(); initMonaco(); initTheme(); initParsers(); requestAnimationFrame(()=>{ adjustContentOffset(); alignSqlToolbar(); }); window.addEventListener('resize', debounce(()=>{ adjustContentOffset(); alignSqlToolbar(); drawAllLinks(); },50)); initSplitter(); }
+  function init(){ attachEvents(); window.initThemeSwitch?.(); initMonaco(); window.initTheme?.(); initParsers(); requestAnimationFrame(()=>{ adjustContentOffset(); alignSqlToolbar(); }); window.addEventListener('resize', debounce(()=>{ adjustContentOffset(); alignSqlToolbar(); drawAllLinks(); },50)); initSplitter(); }
   // Update footer year on DOMContentLoaded as part of init
   const _setFooterYear = () => { try { const el=document.getElementById('footerYear'); if (el) el.textContent = String(new Date().getFullYear()); } catch {} };
   document.addEventListener('DOMContentLoaded', _setFooterYear);

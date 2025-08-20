@@ -160,6 +160,20 @@
 		</div>
 	</footer>
 
+	<!-- Modal message box -->
+	<div id="appModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="appModalTitle">
+		<div class="modal-dialog">
+			<div class="modal-header">
+				<h3 id="appModalTitle" class="modal-title">Notice</h3>
+				<button id="appModalClose" class="modal-close" aria-label="Close">×</button>
+			</div>
+			<div id="appModalBody" class="modal-body"></div>
+			<div class="modal-footer">
+				<button id="appModalOk" class="btn">OK</button>
+			</div>
+		</div>
+	</div>
+
 	<!-- Monaco Editor loader from CDN -->
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
 	<script>
@@ -168,6 +182,8 @@
 			require(['vs/editor/editor.main'], function () { cb(window.monaco); });
 		};
 	</script>
+	<script src="data-theme.js"></script>
+	<script src="data-utils.js"></script>
 	<script src="data-tool.js"></script>
 </body>
 </html>
