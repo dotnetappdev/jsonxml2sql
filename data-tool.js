@@ -1188,7 +1188,18 @@
   function attachEvents(){
     // Left pane load/clear
     const loadBtn=document.getElementById('loadBtn');
-    loadBtn?.addEventListener('click', ()=>{ const text=document.getElementById('rawInput').value.trim(); if (!text) return; try { loadData(text); } catch(e){ alert(e.message);} });
+    loadBtn?.addEventListener('click', ()=>{
+      const text = document.getElementById('rawInput').value.trim();
+      if (!text){
+        showModal('<p><strong>Data is required.</strong></p><p>Please paste JSON or XML into the input editor on the left, then click <em>Load</em>.</p>', 'Data required');
+        return;
+      }
+      try {
+        loadData(text);
+      } catch(e){
+        showModal(`<p>${(e && e.message) ? e.message : 'Failed to load data.'}</p>`, 'Load error');
+      }
+    });
     const clearLeftBtn=document.getElementById('clearLeftBtn');
     clearLeftBtn?.addEventListener('click', ()=>{ document.getElementById('rawInput').value=''; const info=document.getElementById('inputInfo'); if (info) info.textContent='No data loaded.'; const prev=document.getElementById('preview'); if (prev) prev.textContent=''; const rc=document.getElementById('rowCount'); if (rc) rc.textContent='0 rows'; loadedRows=[]; window.loadedRows=loadedRows; const status=document.getElementById('sqlStatus'); if (status) status.textContent=''; });
 
