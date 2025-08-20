@@ -165,8 +165,9 @@
           i++; let name = tok.value; while (peek() && peek().type==='op' && peek().value==='.') { eat('op','.'); name += '.' + eat('ident').value; }
           return {type:'col', name};
         }
-        if(tok.type==='op'&&tok.value==='('){ i++; const e=parseExpr(); eat('op',')'); return e; }
-        throw new Error('Invalid token');
+  if(tok.type==='op'&&tok.value==='('){ i++; const e=parseExpr(); eat('op',')'); return e; }
+  if (tok.type==='kw') throw new Error(`Invalid token in WHERE: unexpected keyword '${tok.value}'`);
+  throw new Error(`Invalid token in WHERE near '${tok.value ?? tok.type}'`);
       }
       function cmp(){ let l=primary(); if(peek()&&peek().type==='op'&&['=','!=','>','<','>=','<='].includes(peek().value)){ const op=eat('op').value; const r=primary(); return {type:'cmp', op, left:l, right:r}; } return l; }
       function and(){ let l=cmp(); while(peek()&&peek().type==='kw'&&peek().value==='AND'){ eat('kw','AND'); l={type:'and', left:l, right:cmp()}; } return l; }

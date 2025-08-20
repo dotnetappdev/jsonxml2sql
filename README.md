@@ -60,6 +60,25 @@ Notes:
 - Aggregation:
   - `SELECT userId, COUNT(*) AS n, SUM(amount) AS total FROM data.orders GROUP BY userId ORDER BY total DESC`
 
+## Troubleshooting
+
+### WHERE clause: don't use FROM inside WHERE
+
+If you see an error like "Invalid token in WHERE: unexpected keyword 'FROM'", it usually means the query has a clause keyword inside the WHERE expression. For example, this is invalid:
+
+- Wrong: `SELECT * FROM data WHERE FROM data.orders.order = 101`
+
+Correct forms depend on the data shape:
+
+- XML where orders are under `<orders><order .../></orders>` (path is `data.orders.order`):
+  - `SELECT * FROM data.orders.order WHERE orderId = 101`
+- JSON where orders is an array at `data.orders`:
+  - `SELECT * FROM data.orders WHERE orderId = 101`
+
+For joins (e.g., filter by an order property while selecting users):
+
+- `SELECT a.name, b.orderId FROM data.users a INNER JOIN data.orders b ON a.id = b.userId WHERE b.orderId = 101`
+
 ## Usage tips
 
 - Use the Sample JSON/XML buttons to seed the editor, then click Load.

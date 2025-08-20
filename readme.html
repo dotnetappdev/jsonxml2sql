@@ -101,6 +101,26 @@
       <li>Aggregation: <code>SELECT userId, COUNT(*) AS n, SUM(amount) AS total FROM data.orders GROUP BY userId ORDER BY total DESC</code></li>
     </ul>
 
+    <h2>Troubleshooting</h2>
+    <h3>WHERE clause: don't use FROM inside WHERE</h3>
+    <p>If you see an error like <em>"Invalid token in WHERE: unexpected keyword 'FROM'"</em>, it usually means the query has a clause keyword inside the WHERE expression. For example, this is invalid:</p>
+    <ul>
+      <li><strong>Wrong:</strong> <code>SELECT * FROM data WHERE FROM data.orders.order = 101</code></li>
+    </ul>
+    <p>Correct forms depend on the data shape:</p>
+    <ul>
+      <li>XML where orders are under <code>&lt;orders&gt;&lt;order .../&gt;&lt;/orders&gt;</code> (path is <code>data.orders.order</code>):
+        <ul><li><code>SELECT * FROM data.orders.order WHERE orderId = 101</code></li></ul>
+      </li>
+      <li>JSON where orders is an array at <code>data.orders</code>:
+        <ul><li><code>SELECT * FROM data.orders WHERE orderId = 101</code></li></ul>
+      </li>
+    </ul>
+    <p>For joins (e.g., filter by an order property while selecting users):</p>
+    <ul>
+      <li><code>SELECT a.name, b.orderId FROM data.users a INNER JOIN data.orders b ON a.id = b.userId WHERE b.orderId = 101</code></li>
+    </ul>
+
     <h2>Usage tips</h2>
     <ul>
       <li>Use the Sample JSON/XML buttons to seed the editor, then click Load.</li>
