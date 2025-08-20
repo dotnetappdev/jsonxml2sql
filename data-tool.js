@@ -1394,7 +1394,7 @@
       return sql;
     }
 
-    function generateDotNetModel(tableName, rows, namespace, usePlural) {
+    function generateDotNetModel(tableName, rows, namespace, usePlural, includeForeignKeys = false, designerLinks = []) {
       if (!rows || rows.length === 0) return `// No data for model ${tableName}`;
       
       const fieldTypes = analyzeTableFields(rows);
@@ -1410,17 +1410,66 @@
         className = className.slice(0, -1);
       }
       
-      let code = `using System;\nusing System.ComponentModel.DataAnnotations;\n\n`;
-      code += `namespace ${namespace}\n{\n`;
+      let code = `using System;\nusing System.ComponentModel.DataAnnotations;\n`;
+      if (includeForeignKeys && designerLinks.length > 0) {
+        code += `using System.Collections.Generic;\n`;
+      }
+      code += `\nnamespace ${namespace}\n{\n`;
       code += `    public class ${className}\n    {\n`;
       
       for (const field of fields) {
         const cleanField = field.replace(/[^a-zA-Z0-9_]/g, '_');
         const propName = cleanField.charAt(0).toUpperCase() + cleanField.slice(1);
         const dataType = fieldTypes[field].csharp;
-        const nullable = dataType.includes('?') ? '' : '?';
+        
+        // Id fields should never be nullable as they are auto keys
+        const isIdField = field.toLowerCase() === 'id';
+        const nullable = (dataType.includes('?') || isIdField) ? '' : '?';
         
         code += `        public ${dataType}${nullable} ${propName} { get; set; }\n`;
+      }
+      
+      // Add foreign key navigation properties if enabled
+      if (includeForeignKeys && designerLinks.length > 0) {
+        const relatedTables = new Set();
+        
+        // Find links where this table is involved
+        for (const link of designerLinks) {
+          let relatedTable = null;
+          let isOneToMany = false;
+          
+          if (link.leftTable === tableName) {
+            relatedTable = link.rightTable;
+            isOneToMany = link.fkSide === 'left'; // If FK is on left side, it's many-to-one from left perspective
+          } else if (link.rightTable === tableName) {
+            relatedTable = link.leftTable;
+            isOneToMany = link.fkSide === 'right'; // If FK is on right side, it's many-to-one from right perspective
+          }
+          
+          if (relatedTable && !relatedTables.has(relatedTable)) {
+            relatedTables.add(relatedTable);
+            
+            // Clean related table name
+            let relatedClassName = relatedTable.replace(/^data\./, '').replace(/[^a-zA-Z0-9]/g, '');
+            relatedClassName = relatedClassName.charAt(0).toUpperCase() + relatedClassName.slice(1);
+            
+            if (usePlural && !relatedClassName.endsWith('s')) {
+              relatedClassName += 's';
+            } else if (!usePlural && relatedClassName.endsWith('s') && relatedClassName.length > 1) {
+              relatedClassName = relatedClassName.slice(0, -1);
+            }
+            
+            if (isOneToMany) {
+              // One-to-many relationship (collection)
+              code += `\n        // Navigation property\n`;
+              code += `        public virtual ICollection<${relatedClassName}> ${relatedClassName}s { get; set; } = new List<${relatedClassName}>();\n`;
+            } else {
+              // Many-to-one relationship (single reference)
+              code += `\n        // Navigation property\n`;
+              code += `        public virtual ${relatedClassName}? ${relatedClassName} { get; set; }\n`;
+            }
+          }
+        }
       }
       
       code += `    }\n}\n`;
@@ -1539,6 +1588,7 @@
         const namespace = document.getElementById('dotnetNamespace').value.trim();
         const usePlural = document.getElementById('dotnetPlural').checked;
         const generateDbContext = document.getElementById('dotnetDbContext').checked;
+        const includeForeignKeys = document.getElementById('dotnetForeignKeys').checked;
         
         if (!namespace) {
           showModal('Please enter a namespace.', 'Namespace required');
@@ -1554,11 +1604,14 @@
         const files = {};
         const tableNames = [];
         
+        // Get designer links for foreign key relationships
+        const links = includeForeignKeys ? (designerState.links || []) : [];
+        
         for (const group of groups) {
           const tableName = group.name.replace(/^data\./, '') || 'table';
           tableNames.push(group.name);
           const cleanName = tableName.charAt(0).toUpperCase() + tableName.slice(1).replace(/[^a-zA-Z0-9]/g, '');
-          const modelCode = generateDotNetModel(group.name, group.rows, namespace, usePlural);
+          const modelCode = generateDotNetModel(group.name, group.rows, namespace, usePlural, includeForeignKeys, links);
           files[`${cleanName}.cs`] = modelCode;
         }
         
