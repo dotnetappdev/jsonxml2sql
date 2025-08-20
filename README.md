@@ -2,6 +2,12 @@
 
 Paste JSON or XML on the left. Visualize or run simple SQL-like queries on the right. Runs entirely in your browser.
 
+## Demo preview
+
+[![JsonXml2SQL demo](assets/jsonxml2sql.gif)](assets/jsonxml2sql.gif)
+
+Place your GIF at `assets/jsonxml2sql.gif` (you can copy it from `C:\Users\David\Desktop\jsonxml2sql.gif`).
+
 ## Features
 
 - Paste or drag-and-drop JSON or XML
