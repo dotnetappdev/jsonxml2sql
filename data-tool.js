@@ -1338,8 +1338,11 @@
       const fieldTypes = analyzeTableFields(rows);
       const fields = Object.keys(fieldTypes);
       
-      let sql = `-- Create table for ${tableName}\n`;
-      sql += `CREATE TABLE [${tableName}] (\n`;
+      // Clean table name: remove "data." prefix and any non-alphanumeric chars except underscore
+      const cleanTableName = tableName.replace(/^data\./, '').replace(/[^a-zA-Z0-9_]/g, '');
+      
+      let sql = `-- Create table for ${cleanTableName}\n`;
+      sql += `CREATE TABLE ${cleanTableName} (\n`;
       
       // Find primary key fields (only exact field name 'id' case-insensitive)
       const idFields = fields.filter(field => field.toLowerCase() === 'id');
@@ -1351,37 +1354,16 @@
         const isPrimaryKey = isIdField && idFields.length === 1;
         
         if (isPrimaryKey) {
-          return `    [${cleanField}] ${dataType} NOT NULL PRIMARY KEY`;
+          return `    ${cleanField} ${dataType} NOT NULL PRIMARY KEY`;
         } else if (isIdField) {
-          return `    [${cleanField}] ${dataType} NOT NULL`;
+          return `    ${cleanField} ${dataType} NOT NULL`;
         } else {
-          return `    [${cleanField}] ${dataType} NULL`;
+          return `    ${cleanField} ${dataType} NULL`;
         }
       });
       
       sql += fieldDefs.join(',\n');
-      sql += '\n);\n\n';
-      
-      // Add INSERT statements for data importation
-      if (rows.length > 0) {
-        sql += `-- Insert data for ${tableName}\n`;
-        const cols = fields.map(f => f.replace(/[^a-zA-Z0-9_]/g, '_'));
-        const sqlEscape = (v) => {
-          if (v == null) return 'NULL';
-          if (typeof v === 'number') return isFinite(v) ? String(v) : 'NULL';
-          if (typeof v === 'boolean') return v ? 'TRUE' : 'FALSE';
-          if (typeof v === 'object') v = JSON.stringify(v);
-          return '\'' + String(v).replace(/'/g, "''") + '\'';
-        };
-        
-        const insertHeader = `INSERT INTO [${tableName}] ([${cols.join('], [')}]) VALUES`;
-        const insertValues = rows.map(row => {
-          const values = fields.map(field => sqlEscape(row[field]));
-          return `    (${values.join(', ')})`;
-        });
-        
-        sql += insertHeader + '\n' + insertValues.join(',\n') + ';\n';
-      }
+      sql += '\n);\n';
       
       return sql;
     }
