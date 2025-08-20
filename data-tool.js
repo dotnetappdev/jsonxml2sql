@@ -1240,7 +1240,12 @@
       const panels={ 'editor': document.getElementById('panel-editor'), 'designer': document.getElementById('panel-designer') };
       let last = localStorage.getItem('jsonxml2sql_editor_tab') || 'editor';
       switchTo(last);
-      for (const btn of tabButtons) btn.addEventListener('click', ()=>{ switchTo(btn.dataset.tab); });
+      for (const btn of tabButtons) btn.addEventListener('click', ()=>{
+        const tab = btn.dataset.tab;
+  if (btn.id === 'docsTab') { window.open('readme.html', '_blank', 'noopener'); return; }
+        if (!tab || (tab !== 'editor' && tab !== 'designer')) return;
+        switchTo(tab);
+      });
       function switchTo(name){
         for (const btn of tabButtons) btn.classList.toggle('active', btn.dataset.tab===name);
         for (const key of Object.keys(panels)) panels[key].classList.toggle('active', key===name);

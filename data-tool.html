@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>JsonXml2SQL — JSON/XML to SQL Pad</title>
+	<link rel="stylesheet" href="data-tool.css">
+	<meta name="description" content="JsonXml2SQL: Paste JSON or XML, visualize it, or run simple SQL-like queries in the browser.">
+</head>
+<body>
+	<header class="toolbar ribbon-bar" id="mainToolbar">
+		<div class="branding">
+			<span class="brand-title">JsonXml2SQL</span>
+			<span class="brand-desc">Paste JSON or XML on the left. Visualize or query on the right. Runs entirely in your browser.</span>
+		</div>
+		<nav class="menu" id="sqlToolbar" aria-label="SQL actions">
+			<!-- toolbar actions moved under SQL Pad -->
+		</nav>
+		<div class="toolbar-right">
+			<label class="theme-toggle-label" for="themeSwitch">Dark mode</label>
+			<div id="themeSwitch" class="theme-switch" tabindex="0" role="switch" aria-checked="false" aria-label="Toggle dark mode"></div>
+		</div>
+	</header>
+	<main class="app-main">
+		<section class="layout">
+			<div class="left">
+				<div class="pane-header">
+					<h2>Input</h2>
+					<div id="parseRadios" class="source-chooser" aria-label="Parse as"></div>
+					<div class="left-actions" aria-label="Load and sample actions">
+						<button id="sampleJsonBtn" class="btn">Sample JSON</button>
+						<button id="sampleXmlBtn" class="btn">Sample XML</button>
+						<button id="loadBtn" class="btn">Load</button>
+						<button id="clearLeftBtn" class="btn">Clear</button>
+					</div>
+				</div>
+				<textarea id="rawInput" placeholder="Paste JSON or XML here..."></textarea>
+				<div class="status-row">
+					<span id="inputInfo" class="muted">No data loaded.</span>
+				</div>
+			</div>
+
+			<div class="right">
+				<div class="pane-header"><h2>SQL Pad</h2></div>
+				<div class="sql-actions">
+					<button id="runSqlBtn" class="btn primary">▶ Run</button>
+					<button id="genInsertsBtn" class="btn primary">Generate INSERTs</button>
+					<button id="clearStorageBtn" class="btn primary">Clear Storage</button>
+					<button id="clearSqlBtn" class="btn">Clear SQL</button>
+				</div>
+				<div class="tabs" id="editorTabs">
+					<button class="tab active" data-tab="editor">Editor</button>
+					<button class="tab" data-tab="designer">Designer</button>
+					<button class="tab" data-tab="docs" id="docsTab">Docs</button>
+				</div>
+				<div class="tab-panel active" id="panel-editor">
+					<div id="sqlMonaco" class="monaco-wrap" aria-label="SQL editor"></div>
+					<div id="sqlStatus" class="status-row muted"></div>
+				</div>
+				<div class="tab-panel" id="panel-designer">
+					<!-- Read-only SQL preview editor for output columns order -->
+					<div id="designerSqlPreview" class="designer-sql-preview hidden" aria-label="SQL preview for output columns">
+						<div id="sqlPreviewMonaco" class="monaco-wrap" aria-label="Read-only SQL preview"></div>
+					</div>
+					<!-- Output columns manager (visible when two or more tables are linked) -->
+					<div id="outputColumns" class="output-columns hidden">
+						<div class="oc-header">
+							<h3>Output columns</h3>
+							<div class="oc-actions">
+								<label class="muted" for="ocRemoveTableSelect">Remove table:</label>
+								<select id="ocRemoveTableSelect"></select>
+								<button id="ocRemoveTableBtn" class="btn">Remove</button>
+								<label class="muted" for="ocAddTableSelect">Add table:</label>
+								<select id="ocAddTableSelect"></select>
+								<button id="ocAddTableBtn" class="btn">Add</button>
+							</div>
+						</div>
+						<ul id="outputColumnsList" class="oc-list" aria-label="Selected columns list"></ul>
+					</div>
+					<div id="designer" class="designer" aria-label="Join designer">
+						<div id="designerEmptyHint" class="muted designer-empty">Designer needs 2 or more tables. Load JSON/XML with multiple arrays under <code>data.*</code>.</div>
+						<div class="designer-toolbar">
+							<label for="designerDefaultJoinType" class="muted">Default join</label>
+							<select id="designerDefaultJoinType" aria-label="Default join">
+								<option value="INNER">INNER</option>
+								<option value="LEFT">LEFT</option>
+								<option value="RIGHT">RIGHT</option>
+								<option value="FULL">FULL</option>
+							</select>
+							<button id="designerClearLinks" class="btn">Clear links</button>
+							<button id="designerAddOutput" class="btn">Add Output</button>
+							<button id="designerGenerateSql" class="btn primary">Generate SQL</button>
+						</div>
+						<!-- Output area (hidden until Add Output is clicked) -->
+						<div id="designerOutputPanel" class="designer-output" style="display:none;">
+							<div class="output-toolbar">
+								<strong class="muted">Output fields</strong>
+								<div class="spacer"></div>
+								<label class="muted" for="designerOutputRemoveSel">Remove table:</label>
+								<select id="designerOutputRemoveSel"></select>
+								<button id="designerOutputRemoveBtn" class="btn">Remove</button>
+								<label class="muted" for="designerOutputAddSel">Add table:</label>
+								<select id="designerOutputAddSel"></select>
+								<button id="designerOutputAddBtn" class="btn">Add</button>
+							</div>
+							<div class="output-body">
+								<div id="outputMonaco" class="monaco-wrap" aria-label="Output preview (read-only)"></div>
+								<ul id="outputList" class="output-list" aria-label="Reorder output columns"></ul>
+							</div>
+						</div>
+						<div id="designerCanvas" class="designer-canvas">
+							<svg id="designerSvg" class="designer-svg" aria-hidden="true"></svg>
+							<div id="designerTables" class="designer-tables" aria-label="Tables"></div>
+						</div>
+			<div id="designerLinks" class="designer-links" aria-label="Defined links"></div>
+					</div>
+				</div>
+
+				<!-- Horizontal splitter to resize input/editor heights -->
+				<div id="hSplit" class="h-splitter" role="separator" aria-orientation="horizontal" aria-label="Resize editor height"></div>
+
+        
+
+					<div class="pane-header">
+						<h2>Results</h2>
+						<div class="results-controls">
+							<label for="resultsFilter" class="muted rc-label">Filter:</label>
+						<select id="resultsFilter" aria-label="Filter results by table"></select>
+						<button id="downloadCsvBtn" class="btn" title="Download visible results as CSV">Download CSV</button>
+					</div>
+				</div>
+				<div class="tabs" id="resultsTabs">
+					<button class="tab active" data-tab="table">Table</button>
+					<button class="tab" data-tab="raw">Raw</button>
+					<button class="tab" data-tab="tree">Tree</button>
+				</div>
+				<div class="tab-panel active" id="panel-results-table">
+					<div class="table-wrap">
+						<table id="resultsTable"></table>
+					</div>
+				</div>
+				<div class="tab-panel" id="panel-results-raw">
+					<pre id="resultsRaw" class="code" aria-label="Raw results"></pre>
+				</div>
+				<div class="tab-panel" id="panel-results-tree">
+					<div id="resultsTree" class="tree" aria-label="Tree results"></div>
+				</div>
+			</div>
+	</section>
+	</main>
+
+	<footer class="app-footer">
+		<small>JsonXml2SQL supports simple SELECT queries over JSON/XML. FROM clause must be <code>data</code>.</small>
+		<div class="footer-meta">
+			<a href="https://github.com/dotnetappdev/jsonxml2sql" class="gh-link" target="_blank" rel="noopener noreferrer" aria-label="GitHub repository">
+				<svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true" focusable="false">
+					<path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.19 0 .21.15.46.55.38C13.71 14.53 16 11.54 16 8c0-4.42-3.58-8-8-8z"/>
+				</svg>
+			</a>
+			<span class="copyright">© <span id="footerYear">2025</span> by dotnetappdev</span>
+		</div>
+	</footer>
+
+	<!-- Modal message box -->
+	<div id="appModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="appModalTitle">
+		<div class="modal-dialog">
+			<div class="modal-header">
+				<h3 id="appModalTitle" class="modal-title">Notice</h3>
+				<button id="appModalClose" class="modal-close" aria-label="Close">×</button>
+			</div>
+			<div id="appModalBody" class="modal-body"></div>
+			<div class="modal-footer">
+				<button id="appModalOk" class="btn">OK</button>
+			</div>
+		</div>
+	</div>
+
+	<!-- Monaco Editor loader from CDN -->
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
+	<script>
+		window.__loadMonaco = function (cb) {
+			require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' } });
+			require(['vs/editor/editor.main'], function () { cb(window.monaco); });
+		};
+	</script>
+	<script src="data-theme.js"></script>
+	<script src="data-utils.js"></script>
+	<script src="data-tool.js"></script>
+</body>
+</html>
+
+

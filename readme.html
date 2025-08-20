@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>JsonXml2SQL — Documentation</title>
+  <link rel="stylesheet" href="data-tool.css" />
+  <style>
+    body { max-width: 980px; margin: 0 auto; padding: 24px 16px 60px; }
+    .doc h1 { font-size: 2rem; margin: 0 0 12px; }
+    .doc h2 { margin-top: 22px; font-size: 1.25rem; }
+    .doc pre, .doc code { background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 8px; }
+    .doc pre { padding: 10px 12px; overflow: auto; }
+    .doc code { padding: 0 4px; border-radius: 6px; }
+    .doc ul { margin: 8px 0 8px 22px; }
+    .doc a { color: var(--primary); }
+  </style>
+</head>
+<body class="theme-light">
+  <main class="doc">
+    <h1>JsonXml2SQL</h1>
+    <p>Paste JSON or XML on the left. Visualize or run simple SQL-like queries on the right. Runs entirely in your browser.</p>
+
+    <h2>Features</h2>
+    <ul>
+      <li>Paste or drag-and-drop JSON or XML</li>
+      <li>Auto-detects arrays anywhere under <code>data.*</code> and lists them as tables</li>
+      <li>Three result views: Table, Raw (JSON), and Tree (collapsible with keyboard support)</li>
+      <li>Multi-table overview when you run <code>SELECT * FROM data</code>
+        <ul>
+          <li>Per-table row counts and quick filter</li>
+          <li>Download visible data as CSV</li>
+        </ul>
+      </li>
+      <li>Monaco editor with SQL keyword, FROM-path, and field completions</li>
+      <li>Theme toggle (light/dark), fixed toolbar, and responsive layout</li>
+      <li>Generate INSERT statements from current results</li>
+    </ul>
+
+    <h2>SQL support (lightweight engine)</h2>
+    <p>The app includes a small SQL-like engine that works against the loaded JSON/XML.</p>
+    <p>Supported:</p>
+    <ul>
+      <li>SELECT list
+        <ul>
+          <li>Columns by name (e.g., <code>name</code>, <code>userId</code>)</li>
+          <li>Star <code>*</code> and qualified wildcards like <code>a.*</code> or <code>data.users.*</code></li>
+          <li>Aliases via <code>AS</code> (e.g., <code>name AS user_name</code>)</li>
+          <li>Aggregates: <code>COUNT(*)</code>, <code>COUNT(col)</code>, <code>SUM(col)</code>, <code>MIN(col)</code>, <code>MAX(col)</code>, <code>AVG(col)</code></li>
+        </ul>
+      </li>
+      <li>FROM
+        <ul>
+          <li><code>FROM data</code> or any discovered array path under <code>data.*</code> (e.g., <code>FROM data.users</code>, <code>FROM data.orders</code>)</li>
+          <li>Aliases: <code>FROM data.users a</code></li>
+        </ul>
+      </li>
+      <li>JOIN
+        <ul>
+          <li><code>INNER JOIN</code>, <code>LEFT JOIN</code>, <code>RIGHT JOIN</code>, <code>FULL OUTER JOIN</code></li>
+          <li>Equality ON conditions with aliases, e.g., <code>ON a.id = b.userId</code></li>
+          <li>Dotted identifiers supported everywhere (<code>a.id</code>, <code>data.users.id</code>)</li>
+        </ul>
+      </li>
+      <li>WHERE
+        <ul>
+          <li>Comparisons: <code>=</code>, <code>!=</code>, <code>&lt;</code>, <code>&gt;</code>, <code>&lt;=</code>, <code>&gt;=</code></li>
+          <li>Logical <code>AND</code>, <code>OR</code></li>
+          <li>Literals: strings ('x'), numbers, <code>TRUE</code>, <code>FALSE</code>, <code>NULL</code></li>
+        </ul>
+      </li>
+      <li>GROUP BY
+        <ul>
+          <li>With aggregates listed above</li>
+        </ul>
+      </li>
+      <li>ORDER BY
+        <ul>
+          <li><code>ASC</code>/<code>DESC</code></li>
+        </ul>
+      </li>
+      <li>LIMIT/OFFSET</li>
+    </ul>
+    <p><strong>Notes:</strong></p>
+    <ul>
+      <li>XML is parsed via DOMParser and normalized. Attribute/child names are resolved case-insensitively in queries.</li>
+      <li>JOIN value comparisons are number-aware (string "1" joins with number 1).</li>
+    </ul>
+
+    <h2>Examples</h2>
+    <ul>
+      <li>List everything detected: <code>SELECT * FROM data</code></li>
+      <li>Simple projection: <code>SELECT id, name FROM data.users ORDER BY id</code></li>
+      <li>LEFT JOIN: <code>SELECT a.*, b.orderId FROM data.users a LEFT JOIN data.orders b ON a.id = b.userId</code></li>
+      <li>RIGHT/FULL OUTER JOIN:
+        <ul>
+          <li><code>SELECT b.orderId, a.name FROM data.users a RIGHT JOIN data.orders b ON a.id = b.userId</code></li>
+          <li><code>SELECT a.name, b.orderId FROM data.users a FULL OUTER JOIN data.orders b ON a.id = b.userId</code></li>
+        </ul>
+      </li>
+      <li>Aggregation: <code>SELECT userId, COUNT(*) AS n, SUM(amount) AS total FROM data.orders GROUP BY userId ORDER BY total DESC</code></li>
+    </ul>
+
+    <h2>Usage tips</h2>
+    <ul>
+      <li>Use the Sample JSON/XML buttons to seed the editor, then click Load.</li>
+      <li>Use the filter in Results to narrow the multi-table overview (from <code>SELECT * FROM data</code>).</li>
+      <li>To export, use Download CSV.</li>
+      <li>Generate INSERTs from current results with the toolbar button.</li>
+    </ul>
+
+    <h2>Accessibility</h2>
+    <ul>
+      <li>Tree view items are keyboard-toggleable (Enter/Space)</li>
+      <li>Tabs and buttons have focus styles</li>
+    </ul>
+
+    <h2>License</h2>
+    <p>MIT (see repository).</p>
+  </main>
+  <script>
+    // Optional: sync theme based on localStorage
+    try {
+      const saved = localStorage.getItem('jsonxml2sql_theme') || 'light';
+      document.body.classList.toggle('theme-dark', saved === 'dark');
+      document.body.classList.toggle('theme-light', saved === 'light');
+    } catch {}
+  </script>
+</body>
+</html>
