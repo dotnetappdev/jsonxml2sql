@@ -1,6 +1,9 @@
 # JsonXml2SQL
 
+Ever needed to run a simple query on a JSON or XML file and found yourself wrestling with heavyweight tools, ad‑hoc scripts, or risky online uploaders? Spinning up databases, wrangling schemas, or chaining jq/xq just to filter a few fields, join two arrays, or sort some rows feels disproportionate and slow. Sometimes you just want a fast, local way to ask basic questions of your data without setup, installs, or boilerplate.
+
 Paste JSON or XML on the left. Visualize or run simple SQL-like queries on the right. Runs entirely in your browser.
+
 
 ## Demo preview
 
