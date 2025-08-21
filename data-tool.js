@@ -1573,28 +1573,29 @@ namespace {{NAMESPACE}}.Extensions
             const rightTable = tableDisplayName(link.rightTable);
             
             // Add constraint based on relationship type
+            // Foreign key constraint goes on the table that has the foreign key column (rightTable)
             switch(relationshipType) {
               case 'cascade':
-                if (link.leftTable === tableName) {
-                  sql += `ALTER TABLE ${leftTable} ADD CONSTRAINT FK_${leftTable}_${rightTable} FOREIGN KEY (${link.leftCol}) REFERENCES ${rightTable}(${link.rightCol}) ON DELETE CASCADE;\n`;
+                if (link.rightTable === tableName) {
+                  sql += `ALTER TABLE ${rightTable} ADD CONSTRAINT FK_${rightTable}_${leftTable} FOREIGN KEY (${link.rightCol}) REFERENCES ${leftTable}(${link.leftCol}) ON DELETE CASCADE;\n`;
                 }
                 break;
               case 'restrict':
-                if (link.leftTable === tableName) {
-                  sql += `ALTER TABLE ${leftTable} ADD CONSTRAINT FK_${leftTable}_${rightTable} FOREIGN KEY (${link.leftCol}) REFERENCES ${rightTable}(${link.rightCol}) ON DELETE RESTRICT;\n`;
+                if (link.rightTable === tableName) {
+                  sql += `ALTER TABLE ${rightTable} ADD CONSTRAINT FK_${rightTable}_${leftTable} FOREIGN KEY (${link.rightCol}) REFERENCES ${leftTable}(${link.leftCol}) ON DELETE RESTRICT;\n`;
                 }
                 break;
               case 'bidirectional':
-                if (link.leftTable === tableName) {
-                  sql += `ALTER TABLE ${leftTable} ADD CONSTRAINT FK_${leftTable}_${rightTable} FOREIGN KEY (${link.leftCol}) REFERENCES ${rightTable}(${link.rightCol});\n`;
-                }
                 if (link.rightTable === tableName) {
                   sql += `ALTER TABLE ${rightTable} ADD CONSTRAINT FK_${rightTable}_${leftTable} FOREIGN KEY (${link.rightCol}) REFERENCES ${leftTable}(${link.leftCol});\n`;
                 }
-                break;
-              default: // simple
                 if (link.leftTable === tableName) {
                   sql += `ALTER TABLE ${leftTable} ADD CONSTRAINT FK_${leftTable}_${rightTable} FOREIGN KEY (${link.leftCol}) REFERENCES ${rightTable}(${link.rightCol});\n`;
+                }
+                break;
+              default: // simple
+                if (link.rightTable === tableName) {
+                  sql += `ALTER TABLE ${rightTable} ADD CONSTRAINT FK_${rightTable}_${leftTable} FOREIGN KEY (${link.rightCol}) REFERENCES ${leftTable}(${link.leftCol});\n`;
                 }
             }
           });
