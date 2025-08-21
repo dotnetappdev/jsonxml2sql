@@ -102,7 +102,7 @@
 							<button id="designerGenerateSql" class="btn primary">Generate SQL</button>
 						</div>
 						<!-- Output area (hidden until Add Output is clicked) -->
-						<div id="designerOutputPanel" class="designer-output" style="display:none;">
+						<div id="designerOutputPanel" class="designer-output hidden">
 							<div class="output-toolbar">
 								<strong class="muted">Output fields</strong>
 								<div class="spacer"></div>
@@ -194,9 +194,9 @@
 			</div>
 			<div class="modal-body">
 				<p>Generate CREATE TABLE statements for all detected tables.</p>
-				<div style="margin: 12px 0;">
-					<label for="sqlTablesFileName" style="display: block; margin-bottom: 4px;">File name:</label>
-					<input type="text" id="sqlTablesFileName" value="tables.sql" style="width: 100%; padding: 6px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text);">
+				<div class="modal-form-section">
+					<label for="sqlTablesFileName" class="modal-form-label">File name:</label>
+					<input type="text" id="sqlTablesFileName" value="tables.sql" class="modal-form-input">
 				</div>
 			</div>
 			<div class="modal-footer">
@@ -215,19 +215,19 @@
 			</div>
 			<div class="modal-body">
 				<p>Generate C# model classes for all detected tables.</p>
-				<div style="margin: 12px 0;">
-					<label for="dotnetNamespace" style="display: block; margin-bottom: 4px;">Namespace:</label>
-					<input type="text" id="dotnetNamespace" value="MyApp.Models" style="width: 100%; padding: 6px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text);">
+				<div class="modal-form-section">
+					<label for="dotnetNamespace" class="modal-form-label">Namespace:</label>
+					<input type="text" id="dotnetNamespace" value="MyApp.Models" class="modal-form-input">
 				</div>
-				<div style="margin: 12px 0;">
-					<label style="display: flex; align-items: center; gap: 8px;">
-						<input type="checkbox" id="dotnetPlural" style="accent-color: var(--accent, #2b6cf6);">
+				<div class="modal-form-section">
+					<label class="modal-checkbox-label">
+						<input type="checkbox" id="dotnetPlural" class="modal-checkbox">
 						<span>Use plural class names</span>
 					</label>
 				</div>
-				<div style="margin: 12px 0;">
-					<label style="display: flex; align-items: center; gap: 8px;">
-						<input type="checkbox" id="dotnetDbContext" style="accent-color: var(--accent, #2b6cf6);">
+				<div class="modal-form-section">
+					<label class="modal-checkbox-label">
+						<input type="checkbox" id="dotnetDbContext" class="modal-checkbox">
 						<span>Generate ApplicationDbContext</span>
 					</label>
 				</div>

@@ -580,5 +580,49 @@ tbody tr:nth-child(odd) { background: var(--row-alt); }
 .oc-handle::before { content: ''; position: absolute; inset: 3px 2px; background-image: radial-gradient(currentColor 1px, transparent 1px); background-size: 4px 4px; background-position: 0 0; color: var(--muted); opacity: 0.8; }
 .oc-alias { color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
 
+/* Common utility classes for removing inline styles */
+
+/* Display utilities */
+.hidden { display: none; }
+
+/* Modal form styling */
+.modal-form-section { margin: 12px 0; }
+.modal-form-section.hidden { margin: 12px 0; display: none; }
+
+.modal-form-label { display: block; margin-bottom: 4px; }
+
+.modal-form-input {
+	width: 100%;
+	padding: 6px;
+	border: 1px solid var(--border);
+	border-radius: 4px;
+	background: var(--bg);
+	color: var(--text);
+}
+
+.modal-checkbox-label {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.modal-checkbox {
+	accent-color: var(--accent, #2b6cf6);
+}
+
+.modal-relationships-header {
+	margin: 8px 0 12px 0;
+	color: var(--text);
+}
+
+.modal-relationships-list {
+	max-height: 200px;
+	overflow-y: auto;
+	border: 1px solid var(--border);
+	border-radius: 4px;
+	padding: 8px;
+	background: var(--bg-secondary, var(--bg));
+}
+
 
 

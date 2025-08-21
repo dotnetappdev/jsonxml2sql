@@ -103,7 +103,7 @@
 							<button id="designerGenerateSql" class="btn primary">Generate SQL</button>
 						</div>
 						<!-- Output area (hidden until Add Output is clicked) -->
-						<div id="designerOutputPanel" class="designer-output" style="display:none;">
+						<div id="designerOutputPanel" class="designer-output hidden">
 							<div class="output-toolbar">
 								<strong class="muted">Output fields</strong>
 								<div class="spacer"></div>
@@ -195,32 +195,32 @@
 			</div>
 			<div class="modal-body">
 				<p>Generate CREATE TABLE statements for all detected tables.</p>
-				<div style="margin: 12px 0;">
-					<label for="sqlTablesFileName" style="display: block; margin-bottom: 4px;">File name:</label>
-					<input type="text" id="sqlTablesFileName" value="tables.sql" style="width: 100%; padding: 6px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text);">
+				<div class="modal-form-section">
+					<label for="sqlTablesFileName" class="modal-form-label">File name:</label>
+					<input type="text" id="sqlTablesFileName" value="tables.sql" class="modal-form-input">
 				</div>
-				<div style="margin: 12px 0;">
-					<label style="display: flex; align-items: center; gap: 8px;">
-						<input type="checkbox" id="sqlTablesAutoId" checked style="accent-color: var(--accent, #2b6cf6);">
+				<div class="modal-form-section">
+					<label class="modal-checkbox-label">
+						<input type="checkbox" id="sqlTablesAutoId" checked class="modal-checkbox">
 						<span>Auto ID (treat 'id' fields as primary keys)</span>
 					</label>
 				</div>
-				<div style="margin: 12px 0;">
-					<label style="display: flex; align-items: center; gap: 8px;">
-						<input type="checkbox" id="sqlTablesIncludeData" style="accent-color: var(--accent, #2b6cf6);">
+				<div class="modal-form-section">
+					<label class="modal-checkbox-label">
+						<input type="checkbox" id="sqlTablesIncludeData" class="modal-checkbox">
 						<span>Include data (generate INSERT statements)</span>
 					</label>
 				</div>
 				
-				<div id="sqlTablesZipFileOption" style="margin: 12px 0; display: none;">
-					<label style="display: flex; align-items: center; gap: 8px;">
-						<input type="checkbox" id="sqlTablesZipFile" style="accent-color: var(--accent, #2b6cf6);">
+				<div id="sqlTablesZipFileOption" class="modal-form-section hidden">
+					<label class="modal-checkbox-label">
+						<input type="checkbox" id="sqlTablesZipFile" class="modal-checkbox">
 						<span>Generate as ZIP file (separate SQL file for each table)</span>
 					</label>
 				</div>
-				<div id="sqlTablesZipFileName" style="margin: 12px 0; display: none;">
-					<label for="sqlTablesZipFileNameInput" style="display: block; margin-bottom: 4px;">ZIP file name:</label>
-					<input type="text" id="sqlTablesZipFileNameInput" value="tables.zip" style="width: 100%; padding: 6px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text);">
+				<div id="sqlTablesZipFileName" class="modal-form-section hidden">
+					<label for="sqlTablesZipFileNameInput" class="modal-form-label">ZIP file name:</label>
+					<input type="text" id="sqlTablesZipFileNameInput" value="tables.zip" class="modal-form-input">
 				</div>
 			</div>
 			<div class="modal-footer">
@@ -239,53 +239,53 @@
 			</div>
 			<div class="modal-body">
 				<p>Generate C# model classes for all detected tables.</p>
-				<div style="margin: 12px 0;">
-					<label for="dotnetNamespace" style="display: block; margin-bottom: 4px;">Namespace:</label>
-					<input type="text" id="dotnetNamespace" value="MyApp.Models" style="width: 100%; padding: 6px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text);">
+				<div class="modal-form-section">
+					<label for="dotnetNamespace" class="modal-form-label">Namespace:</label>
+					<input type="text" id="dotnetNamespace" value="MyApp.Models" class="modal-form-input">
 				</div>
-				<div style="margin: 12px 0;">
-					<label style="display: flex; align-items: center; gap: 8px;">
-						<input type="checkbox" id="dotnetPlural" style="accent-color: var(--accent, #2b6cf6);">
+				<div class="modal-form-section">
+					<label class="modal-checkbox-label">
+						<input type="checkbox" id="dotnetPlural" class="modal-checkbox">
 						<span>Use plural class names</span>
 					</label>
 				</div>
-				<div style="margin: 12px 0;">
-					<label style="display: flex; align-items: center; gap: 8px;">
-						<input type="checkbox" id="dotnetDbContext" style="accent-color: var(--accent, #2b6cf6);">
+				<div class="modal-form-section">
+					<label class="modal-checkbox-label">
+						<input type="checkbox" id="dotnetDbContext" class="modal-checkbox">
 						<span>Generate ApplicationDbContext</span>
 					</label>
 				</div>
-				<div style="margin: 12px 0;">
-					<label style="display: flex; align-items: center; gap: 8px;">
-						<input type="checkbox" id="dotnetForeignKeys" style="accent-color: var(--accent, #2b6cf6);">
+				<div class="modal-form-section">
+					<label class="modal-checkbox-label">
+						<input type="checkbox" id="dotnetForeignKeys" class="modal-checkbox">
 						<span>Export foreign key tables (include navigation properties)</span>
 					</label>
 				</div>
 				
 				<!-- Foreign Key Relationships Configuration -->
-				<div id="dotnetRelationshipConfig" style="margin: 12px 0; display: none;">
-					<h4 style="margin: 8px 0 12px 0; color: var(--text);">Configure Relationships:</h4>
-					<div id="dotnetRelationshipsList" style="max-height: 200px; overflow-y: auto; border: 1px solid var(--border); border-radius: 4px; padding: 8px; background: var(--bg-secondary, var(--bg));">
+				<div id="dotnetRelationshipConfig" class="modal-form-section hidden">
+					<h4 class="modal-relationships-header">Configure Relationships:</h4>
+					<div id="dotnetRelationshipsList" class="modal-relationships-list">
 						<!-- Relationships will be populated by JavaScript -->
 					</div>
 				</div>
 				
-				<div style="margin: 12px 0;">
-					<label style="display: flex; align-items: center; gap: 8px;">
-						<input type="checkbox" id="dotnetCrudService" style="accent-color: var(--accent, #2b6cf6);">
+				<div class="modal-form-section">
+					<label class="modal-checkbox-label">
+						<input type="checkbox" id="dotnetCrudService" class="modal-checkbox">
 						<span>Generate Entity Framework CRUD service</span>
 					</label>
 				</div>
 				
-				<div id="dotnetZipFileOption" style="margin: 12px 0; display: none;">
-					<label style="display: flex; align-items: center; gap: 8px;">
-						<input type="checkbox" id="dotnetZipFile" style="accent-color: var(--accent, #2b6cf6);">
+				<div id="dotnetZipFileOption" class="modal-form-section hidden">
+					<label class="modal-checkbox-label">
+						<input type="checkbox" id="dotnetZipFile" class="modal-checkbox">
 						<span>Generate as ZIP file (separate file for each model)</span>
 					</label>
 				</div>
-				<div id="dotnetZipFileName" style="margin: 12px 0; display: none;">
-					<label for="dotnetZipFileNameInput" style="display: block; margin-bottom: 4px;">ZIP file name:</label>
-					<input type="text" id="dotnetZipFileNameInput" value="dotnet-models.zip" style="width: 100%; padding: 6px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text);">
+				<div id="dotnetZipFileName" class="modal-form-section hidden">
+					<label for="dotnetZipFileNameInput" class="modal-form-label">ZIP file name:</label>
+					<input type="text" id="dotnetZipFileNameInput" value="dotnet-models.zip" class="modal-form-input">
 				</div>
 			</div>
 			<div class="modal-footer">
