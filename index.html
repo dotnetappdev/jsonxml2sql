@@ -198,6 +198,43 @@
 					<label for="sqlTablesFileName" class="modal-form-label">File name:</label>
 					<input type="text" id="sqlTablesFileName" value="tables.sql" class="modal-form-input">
 				</div>
+				<div class="modal-form-section">
+					<label class="modal-checkbox-label">
+						<input type="checkbox" id="sqlTablesAutoId" checked class="modal-checkbox">
+						<span>Auto ID (treat 'id' fields as primary keys)</span>
+					</label>
+				</div>
+				<div class="modal-form-section">
+					<label class="modal-checkbox-label">
+						<input type="checkbox" id="sqlTablesIncludeData" class="modal-checkbox">
+						<span>Include data (generate INSERT statements)</span>
+					</label>
+				</div>
+				<div class="modal-form-section">
+					<label class="modal-checkbox-label">
+						<input type="checkbox" id="sqlTablesIncludeForeignKeys" class="modal-checkbox">
+						<span>Include foreign key relationships (add relationship documentation)</span>
+					</label>
+				</div>
+				
+				<!-- Foreign Key Relationships Configuration -->
+				<div id="sqlTablesRelationshipConfig" class="modal-form-section hidden">
+					<h4 class="modal-relationships-header">Configure Relationships:</h4>
+					<div id="sqlTablesRelationshipsList" class="modal-relationships-list">
+						<!-- Relationships will be populated by JavaScript -->
+					</div>
+				</div>
+				
+				<div id="sqlTablesZipFileOption" class="modal-form-section hidden">
+					<label class="modal-checkbox-label">
+						<input type="checkbox" id="sqlTablesZipFile" class="modal-checkbox">
+						<span>Generate as ZIP file (separate SQL file for each table)</span>
+					</label>
+				</div>
+				<div id="sqlTablesZipFileName" class="modal-form-section hidden">
+					<label for="sqlTablesZipFileNameInput" class="modal-form-label">ZIP file name:</label>
+					<input type="text" id="sqlTablesZipFileNameInput" value="tables.zip" class="modal-form-input">
+				</div>
 			</div>
 			<div class="modal-footer">
 				<button id="sqlTablesSave" class="btn primary">Save</button>
@@ -230,6 +267,38 @@
 						<input type="checkbox" id="dotnetDbContext" class="modal-checkbox">
 						<span>Generate ApplicationDbContext</span>
 					</label>
+				</div>
+				<div class="modal-form-section">
+					<label class="modal-checkbox-label">
+						<input type="checkbox" id="dotnetForeignKeys" class="modal-checkbox">
+						<span>Export foreign key tables (include navigation properties)</span>
+					</label>
+				</div>
+				
+				<!-- Foreign Key Relationships Configuration -->
+				<div id="dotnetRelationshipConfig" class="modal-form-section hidden">
+					<h4 class="modal-relationships-header">Configure Relationships:</h4>
+					<div id="dotnetRelationshipsList" class="modal-relationships-list">
+						<!-- Relationships will be populated by JavaScript -->
+					</div>
+				</div>
+				
+				<div class="modal-form-section">
+					<label class="modal-checkbox-label">
+						<input type="checkbox" id="dotnetCrudService" class="modal-checkbox">
+						<span>Generate Entity Framework CRUD service</span>
+					</label>
+				</div>
+				
+				<div id="dotnetZipFileOption" class="modal-form-section hidden">
+					<label class="modal-checkbox-label">
+						<input type="checkbox" id="dotnetZipFile" class="modal-checkbox">
+						<span>Generate as ZIP file (separate file for each model)</span>
+					</label>
+				</div>
+				<div id="dotnetZipFileName" class="modal-form-section hidden">
+					<label for="dotnetZipFileNameInput" class="modal-form-label">ZIP file name:</label>
+					<input type="text" id="dotnetZipFileNameInput" value="dotnet-models.zip" class="modal-form-input">
 				</div>
 			</div>
 			<div class="modal-footer">
