@@ -210,6 +210,20 @@
 						<span>Include data (generate INSERT statements)</span>
 					</label>
 				</div>
+				<div class="modal-form-section">
+					<label class="modal-checkbox-label">
+						<input type="checkbox" id="sqlTablesIncludeForeignKeys" class="modal-checkbox">
+						<span>Include foreign key relationships (add relationship documentation)</span>
+					</label>
+				</div>
+				
+				<!-- Foreign Key Relationships Configuration -->
+				<div id="sqlTablesRelationshipConfig" class="modal-form-section hidden">
+					<h4 class="modal-relationships-header">Configure Relationships:</h4>
+					<div id="sqlTablesRelationshipsList" class="modal-relationships-list">
+						<!-- Relationships will be populated by JavaScript -->
+					</div>
+				</div>
 				
 				<div id="sqlTablesZipFileOption" class="modal-form-section hidden">
 					<label class="modal-checkbox-label">

@@ -1872,9 +1872,90 @@ namespace {{NAMESPACE}}.Extensions
       return (crc ^ (-1)) >>> 0;
     }
 
+    function populateSQLTablesRelationshipConfiguration() {
+      const configDiv = document.getElementById('sqlTablesRelationshipConfig');
+      const listDiv = document.getElementById('sqlTablesRelationshipsList');
+      if (!configDiv || !listDiv) return;
+      
+      const links = designerState.links || [];
+      if (links.length === 0) {
+        configDiv.style.display = 'none';
+        return;
+      }
+      
+      listDiv.innerHTML = '';
+      
+      links.forEach((link, index) => {
+        const relationshipDiv = document.createElement('div');
+        relationshipDiv.style.cssText = 'margin: 8px 0; padding: 8px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg);';
+        
+        const leftTable = tableDisplayName(link.leftTable);
+        const rightTable = tableDisplayName(link.rightTable);
+        
+        relationshipDiv.innerHTML = `
+          <div style="margin-bottom: 8px; font-weight: bold; color: var(--text);">
+            ${leftTable}.${link.leftCol} ⟷ ${rightTable}.${link.rightCol}
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <label style="color: var(--text);">Foreign Key Type:</label>
+            <select class="sql-relationship-type-select" data-link-index="${index}" style="padding: 4px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text);">
+              <option value="simple">Simple Foreign Key (${leftTable} → ${rightTable})</option>
+              <option value="bidirectional">Bidirectional Relationship (${leftTable} ⟷ ${rightTable})</option>
+              <option value="cascade">Cascade Delete (${leftTable} → ${rightTable})</option>
+              <option value="restrict">Restrict Delete (${leftTable} → ${rightTable})</option>
+            </select>
+          </div>
+        `;
+        
+        listDiv.appendChild(relationshipDiv);
+      });
+    }
+
+    function populateSQLTablesRelationshipConfiguration() {
+      const configDiv = document.getElementById('sqlTablesRelationshipConfig');
+      const listDiv = document.getElementById('sqlTablesRelationshipsList');
+      if (!configDiv || !listDiv) return;
+      
+      const links = designerState.links || [];
+      if (links.length === 0) {
+        configDiv.style.display = 'none';
+        return;
+      }
+      
+      listDiv.innerHTML = '';
+      
+      links.forEach((link, index) => {
+        const relationshipDiv = document.createElement('div');
+        relationshipDiv.style.cssText = 'margin: 8px 0; padding: 8px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg);';
+        
+        const leftTable = tableDisplayName(link.leftTable);
+        const rightTable = tableDisplayName(link.rightTable);
+        
+        relationshipDiv.innerHTML = `
+          <div style="margin-bottom: 8px; font-weight: bold; color: var(--text);">
+            ${leftTable}.${link.leftCol} ⟷ ${rightTable}.${link.rightCol}
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <label style="color: var(--text);">Foreign Key Type:</label>
+            <select class="sql-relationship-type-select" data-link-index="${index}" style="padding: 4px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text);">
+              <option value="simple">Simple Foreign Key (${leftTable} → ${rightTable})</option>
+              <option value="bidirectional">Bidirectional Relationship (${leftTable} ⟷ ${rightTable})</option>
+              <option value="cascade">Cascade Delete (${leftTable} → ${rightTable})</option>
+              <option value="restrict">Restrict Delete (${leftTable} → ${rightTable})</option>
+            </select>
+          </div>
+        `;
+        
+        listDiv.appendChild(relationshipDiv);
+      });
+    }
+
     function showSQLTablesModal() {
       const modal = document.getElementById('sqlTablesModal');
       if (!modal) return;
+      
+      // Populate relationship configuration
+      populateSQLTablesRelationshipConfiguration();
       
       // Show ZIP file option if there are multiple tables
       const groups = collectRootArrays();
@@ -1901,6 +1982,15 @@ namespace {{NAMESPACE}}.Extensions
         document.getElementById('sqlTablesCancel')?.removeEventListener('click', onCancel);
         document.getElementById('sqlTablesModalClose')?.removeEventListener('click', onCancel);
         document.getElementById('sqlTablesZipFile')?.removeEventListener('change', onZipToggle);
+        document.getElementById('sqlTablesIncludeForeignKeys')?.removeEventListener('change', onForeignKeyToggle);
+      };
+      
+      const onForeignKeyToggle = () => {
+        const isChecked = document.getElementById('sqlTablesIncludeForeignKeys').checked;
+        const configDiv = document.getElementById('sqlTablesRelationshipConfig');
+        if (configDiv) {
+          configDiv.style.display = isChecked ? 'block' : 'none';
+        }
       };
       
       const onZipToggle = () => {
@@ -1915,6 +2005,7 @@ namespace {{NAMESPACE}}.Extensions
         const fileName = document.getElementById('sqlTablesFileName').value.trim();
         const autoId = document.getElementById('sqlTablesAutoId').checked;
         const includeData = document.getElementById('sqlTablesIncludeData').checked;
+        const includeForeignKeys = document.getElementById('sqlTablesIncludeForeignKeys').checked;
         const generateZipFile = document.getElementById('sqlTablesZipFile').checked;
         const zipFileName = document.getElementById('sqlTablesZipFileNameInput').value.trim();
         
@@ -1926,7 +2017,20 @@ namespace {{NAMESPACE}}.Extensions
           return;
         }
         
-        const options = { autoId, includeData };
+        // Collect relationship configurations from the UI
+        const relationshipConfigs = {};
+        if (includeForeignKeys) {
+          const selects = document.querySelectorAll('.sql-relationship-type-select');
+          selects.forEach(select => {
+            const linkIndex = parseInt(select.dataset.linkIndex);
+            if (linkIndex >= 0 && linkIndex < (designerState.links || []).length) {
+              relationshipConfigs[linkIndex] = select.value;
+            }
+          });
+        }
+        
+        const options = { autoId, includeData, includeForeignKeys, relationshipConfigs };
+        const links = includeForeignKeys ? (designerState.links || []) : [];
         
         if (groups.length === 1 && !generateZipFile) {
           // Single file and ZIP not requested
@@ -1940,10 +2044,30 @@ namespace {{NAMESPACE}}.Extensions
             files[`${tableName}.sql`] = generateSQLTable(group.name, group.rows, options);
           }
           // Include foreign key relationship mapping in comments
-          if ((designerState.links || []).length > 0) {
+          if (includeForeignKeys && links.length > 0) {
             let relationshipDoc = '-- Foreign Key Relationships\n';
-            designerState.links.forEach(link => {
-              relationshipDoc += `-- ${link.leftTable}.${link.leftCol} -> ${link.rightTable}.${link.rightCol}\n`;
+            links.forEach((link, index) => {
+              const relationshipType = relationshipConfigs[index] || 'simple';
+              const leftTable = tableDisplayName(link.leftTable);
+              const rightTable = tableDisplayName(link.rightTable);
+              relationshipDoc += `-- ${leftTable}.${link.leftCol} -> ${rightTable}.${link.rightCol} (${relationshipType})\n`;
+              
+              // Add constraint documentation based on relationship type
+              switch(relationshipType) {
+                case 'cascade':
+                  relationshipDoc += `--   ALTER TABLE ${leftTable} ADD CONSTRAINT FK_${leftTable}_${rightTable} FOREIGN KEY (${link.leftCol}) REFERENCES ${rightTable}(${link.rightCol}) ON DELETE CASCADE;\n`;
+                  break;
+                case 'restrict':
+                  relationshipDoc += `--   ALTER TABLE ${leftTable} ADD CONSTRAINT FK_${leftTable}_${rightTable} FOREIGN KEY (${link.leftCol}) REFERENCES ${rightTable}(${link.rightCol}) ON DELETE RESTRICT;\n`;
+                  break;
+                case 'bidirectional':
+                  relationshipDoc += `--   ALTER TABLE ${leftTable} ADD CONSTRAINT FK_${leftTable}_${rightTable} FOREIGN KEY (${link.leftCol}) REFERENCES ${rightTable}(${link.rightCol});\n`;
+                  relationshipDoc += `--   ALTER TABLE ${rightTable} ADD CONSTRAINT FK_${rightTable}_${leftTable} FOREIGN KEY (${link.rightCol}) REFERENCES ${leftTable}(${link.leftCol});\n`;
+                  break;
+                default: // simple
+                  relationshipDoc += `--   ALTER TABLE ${leftTable} ADD CONSTRAINT FK_${leftTable}_${rightTable} FOREIGN KEY (${link.leftCol}) REFERENCES ${rightTable}(${link.rightCol});\n`;
+              }
+              relationshipDoc += '\n';
             });
             files['_relationships.sql'] = relationshipDoc;
           }
@@ -1959,10 +2083,30 @@ namespace {{NAMESPACE}}.Extensions
             downloadBlob(sql, individualFileName, 'text/plain;charset=utf-8');
           }
           // Also download relationships file if there are relationships
-          if ((designerState.links || []).length > 0) {
+          if (includeForeignKeys && links.length > 0) {
             let relationshipDoc = '-- Foreign Key Relationships\n';
-            designerState.links.forEach(link => {
-              relationshipDoc += `-- ${link.leftTable}.${link.leftCol} -> ${link.rightTable}.${link.rightCol}\n`;
+            links.forEach((link, index) => {
+              const relationshipType = relationshipConfigs[index] || 'simple';
+              const leftTable = tableDisplayName(link.leftTable);
+              const rightTable = tableDisplayName(link.rightTable);
+              relationshipDoc += `-- ${leftTable}.${link.leftCol} -> ${rightTable}.${link.rightCol} (${relationshipType})\n`;
+              
+              // Add constraint documentation based on relationship type
+              switch(relationshipType) {
+                case 'cascade':
+                  relationshipDoc += `--   ALTER TABLE ${leftTable} ADD CONSTRAINT FK_${leftTable}_${rightTable} FOREIGN KEY (${link.leftCol}) REFERENCES ${rightTable}(${link.rightCol}) ON DELETE CASCADE;\n`;
+                  break;
+                case 'restrict':
+                  relationshipDoc += `--   ALTER TABLE ${leftTable} ADD CONSTRAINT FK_${leftTable}_${rightTable} FOREIGN KEY (${link.leftCol}) REFERENCES ${rightTable}(${link.rightCol}) ON DELETE RESTRICT;\n`;
+                  break;
+                case 'bidirectional':
+                  relationshipDoc += `--   ALTER TABLE ${leftTable} ADD CONSTRAINT FK_${leftTable}_${rightTable} FOREIGN KEY (${link.leftCol}) REFERENCES ${rightTable}(${link.rightCol});\n`;
+                  relationshipDoc += `--   ALTER TABLE ${rightTable} ADD CONSTRAINT FK_${rightTable}_${leftTable} FOREIGN KEY (${link.rightCol}) REFERENCES ${leftTable}(${link.leftCol});\n`;
+                  break;
+                default: // simple
+                  relationshipDoc += `--   ALTER TABLE ${leftTable} ADD CONSTRAINT FK_${leftTable}_${rightTable} FOREIGN KEY (${link.leftCol}) REFERENCES ${rightTable}(${link.rightCol});\n`;
+              }
+              relationshipDoc += '\n';
             });
             downloadBlob(relationshipDoc, '_relationships.sql', 'text/plain;charset=utf-8');
           }
@@ -1981,6 +2125,10 @@ namespace {{NAMESPACE}}.Extensions
       document.getElementById('sqlTablesCancel')?.addEventListener('click', onCancel);
       document.getElementById('sqlTablesModalClose')?.addEventListener('click', onCancel);
       document.getElementById('sqlTablesZipFile')?.addEventListener('change', onZipToggle);
+      
+      // Set up foreign key toggle listener
+      document.getElementById('sqlTablesIncludeForeignKeys')?.addEventListener('change', onForeignKeyToggle);
+      onForeignKeyToggle(); // Initialize visibility
       
       // Initialize ZIP filename visibility
       onZipToggle();
