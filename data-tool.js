@@ -1931,15 +1931,21 @@ namespace {{NAMESPACE}}.Extensions
           const finalFileName = fileName.endsWith('.zip') ? fileName : fileName.replace(/\.[^.]*$/, '') + '.zip';
           downloadBlob(zipContent, finalFileName, 'application/zip');
         } else {
-          // Multiple files - create combined content (legacy behavior)
-          const files = {};
+          // Multiple files - download each file individually
           for (const group of groups) {
             const tableName = group.name.replace(/^data\./, '') || 'table';
-            files[`${tableName}.sql`] = generateSQLTable(group.name, group.rows, options);
+            const sql = generateSQLTable(group.name, group.rows, options);
+            const individualFileName = `${tableName}.sql`;
+            downloadBlob(sql, individualFileName, 'text/plain;charset=utf-8');
           }
-          const zipContent = createZipContent(files, false); // false flag for combined content
-          const finalFileName = fileName.endsWith('.zip') ? fileName : fileName.replace(/\.[^.]*$/, '') + '_tables.sql';
-          downloadBlob(zipContent, finalFileName, 'text/plain;charset=utf-8');
+          // Also download relationships file if there are relationships
+          if ((designerState.links || []).length > 0) {
+            let relationshipDoc = '-- Foreign Key Relationships\n';
+            designerState.links.forEach(link => {
+              relationshipDoc += `-- ${link.leftTable}.${link.leftCol} -> ${link.rightTable}.${link.rightCol}\n`;
+            });
+            downloadBlob(relationshipDoc, '_relationships.sql', 'text/plain;charset=utf-8');
+          }
         }
         
         modal.classList.add('hidden');
@@ -2156,9 +2162,10 @@ namespace {{NAMESPACE}}.Extensions
           const zipContent = createZipContent(files, true); // true flag for actual ZIP
           downloadBlob(zipContent, 'dotnet-models.zip', 'application/zip');
         } else {
-          // Multiple files - create combined content (legacy behavior)
-          const zipContent = createZipContent(files, false); // false flag for combined content
-          downloadBlob(zipContent, 'dotnet-models.cs', 'text/plain;charset=utf-8');
+          // Multiple files - download each file individually
+          for (const [fileName, content] of Object.entries(files)) {
+            downloadBlob(content, fileName, 'text/plain;charset=utf-8');
+          }
         }
         
         modal.classList.add('hidden');
