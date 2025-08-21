@@ -1501,7 +1501,7 @@ namespace {{NAMESPACE}}.Extensions
     function generateSQLTable(tableName, rows, options = {}) {
       if (!rows || rows.length === 0) return `-- No data for table ${tableName}`;
       
-      const { autoId = true, includeData = false } = options;
+      const { autoId = true, includeData = false, includeForeignKeys = false, relationshipConfigs = {}, designerLinks = [] } = options;
       const fieldTypes = analyzeTableFields(rows);
       const fields = Object.keys(fieldTypes);
       
@@ -1555,6 +1555,50 @@ namespace {{NAMESPACE}}.Extensions
           return `    (${vals.join(', ')})`;
         });
         sql += values.join(',\n') + ';\n';
+      }
+      
+      // Add foreign key constraints if enabled and links exist
+      if (includeForeignKeys && designerLinks && designerLinks.length > 0) {
+        const relevantLinks = designerLinks.filter(link => 
+          link.leftTable === tableName || link.rightTable === tableName
+        );
+        
+        if (relevantLinks.length > 0) {
+          sql += `\n-- Foreign Key Constraints for ${cleanTableName}\n`;
+          
+          relevantLinks.forEach((link) => {
+            const linkIndex = designerLinks.indexOf(link);
+            const relationshipType = relationshipConfigs[linkIndex] || 'simple';
+            const leftTable = tableDisplayName(link.leftTable);
+            const rightTable = tableDisplayName(link.rightTable);
+            
+            // Add constraint based on relationship type
+            switch(relationshipType) {
+              case 'cascade':
+                if (link.leftTable === tableName) {
+                  sql += `ALTER TABLE ${leftTable} ADD CONSTRAINT FK_${leftTable}_${rightTable} FOREIGN KEY (${link.leftCol}) REFERENCES ${rightTable}(${link.rightCol}) ON DELETE CASCADE;\n`;
+                }
+                break;
+              case 'restrict':
+                if (link.leftTable === tableName) {
+                  sql += `ALTER TABLE ${leftTable} ADD CONSTRAINT FK_${leftTable}_${rightTable} FOREIGN KEY (${link.leftCol}) REFERENCES ${rightTable}(${link.rightCol}) ON DELETE RESTRICT;\n`;
+                }
+                break;
+              case 'bidirectional':
+                if (link.leftTable === tableName) {
+                  sql += `ALTER TABLE ${leftTable} ADD CONSTRAINT FK_${leftTable}_${rightTable} FOREIGN KEY (${link.leftCol}) REFERENCES ${rightTable}(${link.rightCol});\n`;
+                }
+                if (link.rightTable === tableName) {
+                  sql += `ALTER TABLE ${rightTable} ADD CONSTRAINT FK_${rightTable}_${leftTable} FOREIGN KEY (${link.rightCol}) REFERENCES ${leftTable}(${link.leftCol});\n`;
+                }
+                break;
+              default: // simple
+                if (link.leftTable === tableName) {
+                  sql += `ALTER TABLE ${leftTable} ADD CONSTRAINT FK_${leftTable}_${rightTable} FOREIGN KEY (${link.leftCol}) REFERENCES ${rightTable}(${link.rightCol});\n`;
+                }
+            }
+          });
+        }
       }
       
       return sql;
@@ -2019,18 +2063,18 @@ namespace {{NAMESPACE}}.Extensions
         
         // Collect relationship configurations from the UI
         const relationshipConfigs = {};
+        const links = includeForeignKeys ? (designerState.links || []) : [];
         if (includeForeignKeys) {
           const selects = document.querySelectorAll('.sql-relationship-type-select');
           selects.forEach(select => {
             const linkIndex = parseInt(select.dataset.linkIndex);
-            if (linkIndex >= 0 && linkIndex < (designerState.links || []).length) {
+            if (linkIndex >= 0 && linkIndex < links.length) {
               relationshipConfigs[linkIndex] = select.value;
             }
           });
         }
         
-        const options = { autoId, includeData, includeForeignKeys, relationshipConfigs };
-        const links = includeForeignKeys ? (designerState.links || []) : [];
+        const options = { autoId, includeData, includeForeignKeys, relationshipConfigs, designerLinks: links };
         
         if (groups.length === 1 && !generateZipFile) {
           // Single file and ZIP not requested
@@ -2043,29 +2087,30 @@ namespace {{NAMESPACE}}.Extensions
             const tableName = group.name.replace(/^data\./, '') || 'table';
             files[`${tableName}.sql`] = generateSQLTable(group.name, group.rows, options);
           }
-          // Include foreign key relationship mapping in comments
+          // Include foreign key relationship documentation (convert to executable SQL)
           if (includeForeignKeys && links.length > 0) {
             let relationshipDoc = '-- Foreign Key Relationships\n';
+            relationshipDoc += '-- Execute these statements after creating all tables\n\n';
             links.forEach((link, index) => {
               const relationshipType = relationshipConfigs[index] || 'simple';
               const leftTable = tableDisplayName(link.leftTable);
               const rightTable = tableDisplayName(link.rightTable);
               relationshipDoc += `-- ${leftTable}.${link.leftCol} -> ${rightTable}.${link.rightCol} (${relationshipType})\n`;
               
-              // Add constraint documentation based on relationship type
+              // Add executable constraint statements based on relationship type
               switch(relationshipType) {
                 case 'cascade':
-                  relationshipDoc += `--   ALTER TABLE ${leftTable} ADD CONSTRAINT FK_${leftTable}_${rightTable} FOREIGN KEY (${link.leftCol}) REFERENCES ${rightTable}(${link.rightCol}) ON DELETE CASCADE;\n`;
+                  relationshipDoc += `ALTER TABLE ${leftTable} ADD CONSTRAINT FK_${leftTable}_${rightTable} FOREIGN KEY (${link.leftCol}) REFERENCES ${rightTable}(${link.rightCol}) ON DELETE CASCADE;\n`;
                   break;
                 case 'restrict':
-                  relationshipDoc += `--   ALTER TABLE ${leftTable} ADD CONSTRAINT FK_${leftTable}_${rightTable} FOREIGN KEY (${link.leftCol}) REFERENCES ${rightTable}(${link.rightCol}) ON DELETE RESTRICT;\n`;
+                  relationshipDoc += `ALTER TABLE ${leftTable} ADD CONSTRAINT FK_${leftTable}_${rightTable} FOREIGN KEY (${link.leftCol}) REFERENCES ${rightTable}(${link.rightCol}) ON DELETE RESTRICT;\n`;
                   break;
                 case 'bidirectional':
-                  relationshipDoc += `--   ALTER TABLE ${leftTable} ADD CONSTRAINT FK_${leftTable}_${rightTable} FOREIGN KEY (${link.leftCol}) REFERENCES ${rightTable}(${link.rightCol});\n`;
-                  relationshipDoc += `--   ALTER TABLE ${rightTable} ADD CONSTRAINT FK_${rightTable}_${leftTable} FOREIGN KEY (${link.rightCol}) REFERENCES ${leftTable}(${link.leftCol});\n`;
+                  relationshipDoc += `ALTER TABLE ${leftTable} ADD CONSTRAINT FK_${leftTable}_${rightTable} FOREIGN KEY (${link.leftCol}) REFERENCES ${rightTable}(${link.rightCol});\n`;
+                  relationshipDoc += `ALTER TABLE ${rightTable} ADD CONSTRAINT FK_${rightTable}_${leftTable} FOREIGN KEY (${link.rightCol}) REFERENCES ${leftTable}(${link.leftCol});\n`;
                   break;
                 default: // simple
-                  relationshipDoc += `--   ALTER TABLE ${leftTable} ADD CONSTRAINT FK_${leftTable}_${rightTable} FOREIGN KEY (${link.leftCol}) REFERENCES ${rightTable}(${link.rightCol});\n`;
+                  relationshipDoc += `ALTER TABLE ${leftTable} ADD CONSTRAINT FK_${leftTable}_${rightTable} FOREIGN KEY (${link.leftCol}) REFERENCES ${rightTable}(${link.rightCol});\n`;
               }
               relationshipDoc += '\n';
             });
@@ -2085,26 +2130,27 @@ namespace {{NAMESPACE}}.Extensions
           // Also download relationships file if there are relationships
           if (includeForeignKeys && links.length > 0) {
             let relationshipDoc = '-- Foreign Key Relationships\n';
+            relationshipDoc += '-- Execute these statements after creating all tables\n\n';
             links.forEach((link, index) => {
               const relationshipType = relationshipConfigs[index] || 'simple';
               const leftTable = tableDisplayName(link.leftTable);
               const rightTable = tableDisplayName(link.rightTable);
               relationshipDoc += `-- ${leftTable}.${link.leftCol} -> ${rightTable}.${link.rightCol} (${relationshipType})\n`;
               
-              // Add constraint documentation based on relationship type
+              // Add executable constraint statements based on relationship type
               switch(relationshipType) {
                 case 'cascade':
-                  relationshipDoc += `--   ALTER TABLE ${leftTable} ADD CONSTRAINT FK_${leftTable}_${rightTable} FOREIGN KEY (${link.leftCol}) REFERENCES ${rightTable}(${link.rightCol}) ON DELETE CASCADE;\n`;
+                  relationshipDoc += `ALTER TABLE ${leftTable} ADD CONSTRAINT FK_${leftTable}_${rightTable} FOREIGN KEY (${link.leftCol}) REFERENCES ${rightTable}(${link.rightCol}) ON DELETE CASCADE;\n`;
                   break;
                 case 'restrict':
-                  relationshipDoc += `--   ALTER TABLE ${leftTable} ADD CONSTRAINT FK_${leftTable}_${rightTable} FOREIGN KEY (${link.leftCol}) REFERENCES ${rightTable}(${link.rightCol}) ON DELETE RESTRICT;\n`;
+                  relationshipDoc += `ALTER TABLE ${leftTable} ADD CONSTRAINT FK_${leftTable}_${rightTable} FOREIGN KEY (${link.leftCol}) REFERENCES ${rightTable}(${link.rightCol}) ON DELETE RESTRICT;\n`;
                   break;
                 case 'bidirectional':
-                  relationshipDoc += `--   ALTER TABLE ${leftTable} ADD CONSTRAINT FK_${leftTable}_${rightTable} FOREIGN KEY (${link.leftCol}) REFERENCES ${rightTable}(${link.rightCol});\n`;
-                  relationshipDoc += `--   ALTER TABLE ${rightTable} ADD CONSTRAINT FK_${rightTable}_${leftTable} FOREIGN KEY (${link.rightCol}) REFERENCES ${leftTable}(${link.leftCol});\n`;
+                  relationshipDoc += `ALTER TABLE ${leftTable} ADD CONSTRAINT FK_${leftTable}_${rightTable} FOREIGN KEY (${link.leftCol}) REFERENCES ${rightTable}(${link.rightCol});\n`;
+                  relationshipDoc += `ALTER TABLE ${rightTable} ADD CONSTRAINT FK_${rightTable}_${leftTable} FOREIGN KEY (${link.rightCol}) REFERENCES ${leftTable}(${link.leftCol});\n`;
                   break;
                 default: // simple
-                  relationshipDoc += `--   ALTER TABLE ${leftTable} ADD CONSTRAINT FK_${leftTable}_${rightTable} FOREIGN KEY (${link.leftCol}) REFERENCES ${rightTable}(${link.rightCol});\n`;
+                  relationshipDoc += `ALTER TABLE ${leftTable} ADD CONSTRAINT FK_${leftTable}_${rightTable} FOREIGN KEY (${link.leftCol}) REFERENCES ${rightTable}(${link.rightCol});\n`;
               }
               relationshipDoc += '\n';
             });
