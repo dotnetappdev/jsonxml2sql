@@ -1691,22 +1691,207 @@ namespace {{NAMESPACE}}.Extensions
       return code;
     }
 
-    // Simple JSZip-like functionality using just JavaScript
-    function createZipContent(files) {
-      // For simplicity, we'll just concatenate files with separators
-      // In a real implementation, you'd use JSZip library
-      let content = '';
-      for (const [filename, fileContent] of Object.entries(files)) {
-        content += `\n// ===== ${filename} =====\n`;
-        content += fileContent;
-        content += `\n// ===== End of ${filename} =====\n`;
+    // ZIP file creation functionality using JavaScript
+    function createZipContent(files, createActualZip = false) {
+      if (!createActualZip) {
+        // Legacy behavior - concatenate files with separators
+        let content = '';
+        for (const [filename, fileContent] of Object.entries(files)) {
+          content += `\n// ===== ${filename} =====\n`;
+          content += fileContent;
+          content += `\n// ===== End of ${filename} =====\n`;
+        }
+        return content;
       }
-      return content;
+      
+      // Create actual ZIP file using basic ZIP format
+      // This is a simple ZIP implementation for browser use
+      const encoder = new TextEncoder();
+      const zipFiles = [];
+      
+      for (const [filename, fileContent] of Object.entries(files)) {
+        const data = encoder.encode(fileContent);
+        zipFiles.push({
+          name: filename,
+          data: data,
+          size: data.length
+        });
+      }
+      
+      // Create ZIP file structure
+      const centralDirectory = [];
+      let offset = 0;
+      const fileBlobs = [];
+      
+      zipFiles.forEach((file, index) => {
+        // Local file header
+        const filenameBytes = encoder.encode(file.name);
+        const localHeader = new ArrayBuffer(30 + filenameBytes.length);
+        const localView = new DataView(localHeader);
+        
+        // Local file header signature
+        localView.setUint32(0, 0x04034b50, true);
+        // Version needed to extract
+        localView.setUint16(4, 20, true);
+        // General purpose bit flag
+        localView.setUint16(6, 0, true);
+        // Compression method (0 = no compression)
+        localView.setUint16(8, 0, true);
+        // File last modification time
+        localView.setUint16(10, 0, true);
+        // File last modification date
+        localView.setUint16(12, 0, true);
+        // CRC-32
+        localView.setUint32(14, crc32(file.data), true);
+        // Compressed size
+        localView.setUint32(18, file.size, true);
+        // Uncompressed size
+        localView.setUint32(22, file.size, true);
+        // Filename length
+        localView.setUint16(26, filenameBytes.length, true);
+        // Extra field length
+        localView.setUint16(28, 0, true);
+        
+        // Copy filename
+        const localHeaderBytes = new Uint8Array(localHeader);
+        localHeaderBytes.set(filenameBytes, 30);
+        
+        fileBlobs.push(new Uint8Array(localHeader), filenameBytes, file.data);
+        
+        // Central directory entry
+        centralDirectory.push({
+          filename: file.name,
+          filenameBytes: filenameBytes,
+          offset: offset,
+          size: file.size,
+          crc: crc32(file.data)
+        });
+        
+        offset += 30 + filenameBytes.length + file.size;
+      });
+      
+      // Create central directory
+      const centralDirBlobs = [];
+      centralDirectory.forEach(entry => {
+        const centralHeader = new ArrayBuffer(46 + entry.filenameBytes.length);
+        const centralView = new DataView(centralHeader);
+        
+        // Central directory header signature
+        centralView.setUint32(0, 0x02014b50, true);
+        // Version made by
+        centralView.setUint16(4, 20, true);
+        // Version needed to extract
+        centralView.setUint16(6, 20, true);
+        // General purpose bit flag
+        centralView.setUint16(8, 0, true);
+        // Compression method
+        centralView.setUint16(10, 0, true);
+        // File last modification time
+        centralView.setUint16(12, 0, true);
+        // File last modification date
+        centralView.setUint16(14, 0, true);
+        // CRC-32
+        centralView.setUint32(16, entry.crc, true);
+        // Compressed size
+        centralView.setUint32(20, entry.size, true);
+        // Uncompressed size
+        centralView.setUint32(24, entry.size, true);
+        // Filename length
+        centralView.setUint16(28, entry.filenameBytes.length, true);
+        // Extra field length
+        centralView.setUint16(30, 0, true);
+        // File comment length
+        centralView.setUint16(32, 0, true);
+        // Disk number start
+        centralView.setUint16(34, 0, true);
+        // Internal file attributes
+        centralView.setUint16(36, 0, true);
+        // External file attributes
+        centralView.setUint32(38, 0, true);
+        // Relative offset of local header
+        centralView.setUint32(42, entry.offset, true);
+        
+        const centralHeaderBytes = new Uint8Array(centralHeader);
+        centralHeaderBytes.set(entry.filenameBytes, 46);
+        
+        centralDirBlobs.push(centralHeaderBytes);
+      });
+      
+      const centralDirSize = centralDirBlobs.reduce((size, blob) => size + blob.length, 0);
+      
+      // End of central directory record
+      const endOfCentralDir = new ArrayBuffer(22);
+      const endView = new DataView(endOfCentralDir);
+      
+      // End of central directory signature
+      endView.setUint32(0, 0x06054b50, true);
+      // Number of this disk
+      endView.setUint16(4, 0, true);
+      // Disk where central directory starts
+      endView.setUint16(6, 0, true);
+      // Number of central directory records on this disk
+      endView.setUint16(8, zipFiles.length, true);
+      // Total number of central directory records
+      endView.setUint16(10, zipFiles.length, true);
+      // Size of central directory
+      endView.setUint32(12, centralDirSize, true);
+      // Offset of start of central directory
+      endView.setUint32(16, offset, true);
+      // Comment length
+      endView.setUint16(20, 0, true);
+      
+      // Combine all parts
+      const allBlobs = [...fileBlobs, ...centralDirBlobs, new Uint8Array(endOfCentralDir)];
+      const totalSize = allBlobs.reduce((size, blob) => size + blob.length, 0);
+      const zipBuffer = new Uint8Array(totalSize);
+      
+      let position = 0;
+      allBlobs.forEach(blob => {
+        zipBuffer.set(blob, position);
+        position += blob.length;
+      });
+      
+      return zipBuffer;
+    }
+    
+    // Simple CRC32 implementation
+    function crc32(data) {
+      const table = [];
+      for (let i = 0; i < 256; i++) {
+        let c = i;
+        for (let j = 0; j < 8; j++) {
+          c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+        }
+        table[i] = c;
+      }
+      
+      let crc = 0 ^ (-1);
+      for (let i = 0; i < data.length; i++) {
+        crc = (crc >>> 8) ^ table[(crc ^ data[i]) & 0xFF];
+      }
+      return (crc ^ (-1)) >>> 0;
     }
 
     function showSQLTablesModal() {
       const modal = document.getElementById('sqlTablesModal');
       if (!modal) return;
+      
+      // Show ZIP file option if there are multiple tables
+      const groups = collectRootArrays();
+      const hasMultipleTables = groups.length > 1;
+      const zipOption = document.getElementById('sqlTablesZipFileOption');
+      const zipFileName = document.getElementById('sqlTablesZipFileName');
+      if (zipOption) {
+        zipOption.style.display = hasMultipleTables ? 'block' : 'none';
+      }
+      if (zipFileName) {
+        zipFileName.style.display = 'none'; // Initially hidden, will show when ZIP is checked
+      }
+      // Reset ZIP checkbox
+      const zipCheckbox = document.getElementById('sqlTablesZipFile');
+      if (zipCheckbox) {
+        zipCheckbox.checked = false;
+      }
       
       modal.classList.remove('hidden');
       document.getElementById('sqlTablesFileName').focus();
@@ -1715,12 +1900,23 @@ namespace {{NAMESPACE}}.Extensions
         document.getElementById('sqlTablesSave')?.removeEventListener('click', onSave);
         document.getElementById('sqlTablesCancel')?.removeEventListener('click', onCancel);
         document.getElementById('sqlTablesModalClose')?.removeEventListener('click', onCancel);
+        document.getElementById('sqlTablesZipFile')?.removeEventListener('change', onZipToggle);
+      };
+      
+      const onZipToggle = () => {
+        const isChecked = document.getElementById('sqlTablesZipFile').checked;
+        const zipFileNameDiv = document.getElementById('sqlTablesZipFileName');
+        if (zipFileNameDiv) {
+          zipFileNameDiv.style.display = isChecked ? 'block' : 'none';
+        }
       };
       
       const onSave = () => {
         const fileName = document.getElementById('sqlTablesFileName').value.trim();
         const autoId = document.getElementById('sqlTablesAutoId').checked;
         const includeData = document.getElementById('sqlTablesIncludeData').checked;
+        const generateZipFile = document.getElementById('sqlTablesZipFile').checked;
+        const zipFileName = document.getElementById('sqlTablesZipFileNameInput').value.trim();
         
         if (!fileName) return;
         
@@ -1732,20 +1928,44 @@ namespace {{NAMESPACE}}.Extensions
         
         const options = { autoId, includeData };
         
-        if (groups.length === 1) {
-          // Single file
+        if (groups.length === 1 && !generateZipFile) {
+          // Single file and ZIP not requested
           const sql = generateSQLTable(groups[0].name, groups[0].rows, options);
           downloadBlob(sql, fileName, 'text/plain;charset=utf-8');
-        } else {
-          // Multiple files - create combined content
+        } else if (generateZipFile) {
+          // ZIP file requested - generate actual ZIP with separate files
           const files = {};
           for (const group of groups) {
             const tableName = group.name.replace(/^data\./, '') || 'table';
             files[`${tableName}.sql`] = generateSQLTable(group.name, group.rows, options);
           }
-          const zipContent = createZipContent(files);
-          const finalFileName = fileName.endsWith('.zip') ? fileName : fileName.replace(/\.[^.]*$/, '') + '_tables.sql';
-          downloadBlob(zipContent, finalFileName, 'text/plain;charset=utf-8');
+          // Include foreign key relationship mapping in comments
+          if ((designerState.links || []).length > 0) {
+            let relationshipDoc = '-- Foreign Key Relationships\n';
+            designerState.links.forEach(link => {
+              relationshipDoc += `-- ${link.leftTable}.${link.leftCol} -> ${link.rightTable}.${link.rightCol}\n`;
+            });
+            files['_relationships.sql'] = relationshipDoc;
+          }
+          const zipContent = createZipContent(files, true); // true flag for actual ZIP
+          const finalFileName = zipFileName || 'tables.zip';
+          downloadBlob(zipContent, finalFileName, 'application/zip');
+        } else {
+          // Multiple files - download each file individually
+          for (const group of groups) {
+            const tableName = group.name.replace(/^data\./, '') || 'table';
+            const sql = generateSQLTable(group.name, group.rows, options);
+            const individualFileName = `${tableName}.sql`;
+            downloadBlob(sql, individualFileName, 'text/plain;charset=utf-8');
+          }
+          // Also download relationships file if there are relationships
+          if ((designerState.links || []).length > 0) {
+            let relationshipDoc = '-- Foreign Key Relationships\n';
+            designerState.links.forEach(link => {
+              relationshipDoc += `-- ${link.leftTable}.${link.leftCol} -> ${link.rightTable}.${link.rightCol}\n`;
+            });
+            downloadBlob(relationshipDoc, '_relationships.sql', 'text/plain;charset=utf-8');
+          }
         }
         
         modal.classList.add('hidden');
@@ -1760,6 +1980,10 @@ namespace {{NAMESPACE}}.Extensions
       document.getElementById('sqlTablesSave')?.addEventListener('click', onSave);
       document.getElementById('sqlTablesCancel')?.addEventListener('click', onCancel);
       document.getElementById('sqlTablesModalClose')?.addEventListener('click', onCancel);
+      document.getElementById('sqlTablesZipFile')?.addEventListener('change', onZipToggle);
+      
+      // Initialize ZIP filename visibility
+      onZipToggle();
     }
 
     function populateRelationshipConfiguration() {
@@ -1818,6 +2042,23 @@ namespace {{NAMESPACE}}.Extensions
       // Populate relationship configuration
       populateRelationshipConfiguration();
       
+      // Show ZIP file option if there are multiple tables
+      const groups = collectRootArrays();
+      const hasMultipleTables = groups.length > 1;
+      const zipOption = document.getElementById('dotnetZipFileOption');
+      const zipFileName = document.getElementById('dotnetZipFileName');
+      if (zipOption) {
+        zipOption.style.display = hasMultipleTables ? 'block' : 'none';
+      }
+      if (zipFileName) {
+        zipFileName.style.display = 'none'; // Initially hidden, will show when ZIP is checked
+      }
+      // Reset ZIP checkbox
+      const zipCheckbox = document.getElementById('dotnetZipFile');
+      if (zipCheckbox) {
+        zipCheckbox.checked = false;
+      }
+      
       modal.classList.remove('hidden');
       document.getElementById('dotnetNamespace').focus();
       
@@ -1826,6 +2067,15 @@ namespace {{NAMESPACE}}.Extensions
         document.getElementById('dotnetModelsCancel')?.removeEventListener('click', onCancel);
         document.getElementById('dotnetModelsModalClose')?.removeEventListener('click', onCancel);
         document.getElementById('dotnetForeignKeys')?.removeEventListener('change', onForeignKeyToggle);
+        document.getElementById('dotnetZipFile')?.removeEventListener('change', onDotnetZipToggle);
+      };
+      
+      const onDotnetZipToggle = () => {
+        const isChecked = document.getElementById('dotnetZipFile').checked;
+        const zipFileNameDiv = document.getElementById('dotnetZipFileName');
+        if (zipFileNameDiv) {
+          zipFileNameDiv.style.display = isChecked ? 'block' : 'none';
+        }
       };
       
       const onForeignKeyToggle = () => {
@@ -1840,12 +2090,18 @@ namespace {{NAMESPACE}}.Extensions
       document.getElementById('dotnetForeignKeys')?.addEventListener('change', onForeignKeyToggle);
       onForeignKeyToggle(); // Initialize visibility
       
+      // Set up ZIP toggle listener
+      document.getElementById('dotnetZipFile')?.addEventListener('change', onDotnetZipToggle);
+      onDotnetZipToggle(); // Initialize visibility
+      
       const onSave = async () => {
         const namespace = document.getElementById('dotnetNamespace').value.trim();
         const usePlural = document.getElementById('dotnetPlural').checked;
         const generateDbContext = document.getElementById('dotnetDbContext').checked;
         const includeForeignKeys = document.getElementById('dotnetForeignKeys').checked;
         const generateCrudService = document.getElementById('dotnetCrudService').checked;
+        const generateZipFile = document.getElementById('dotnetZipFile').checked;
+        const zipFileName = document.getElementById('dotnetZipFileNameInput').value.trim();
         
         if (!namespace) {
           showModal('Please enter a namespace.', 'Namespace required');
@@ -1945,14 +2201,20 @@ namespace {{NAMESPACE}}.Extensions
           files['Extensions/ServiceCollectionExtensions.cs'] = await templates.dependencyInjection(classNames, namespace);
         }
         
-        if (Object.keys(files).length === 1) {
-          // Single file
+        if (Object.keys(files).length === 1 && !generateZipFile) {
+          // Single file and ZIP not requested
           const [fileName, content] = Object.entries(files)[0];
           downloadBlob(content, fileName, 'text/plain;charset=utf-8');
+        } else if (generateZipFile) {
+          // ZIP file requested - generate actual ZIP with separate files
+          const zipContent = createZipContent(files, true); // true flag for actual ZIP
+          const finalFileName = zipFileName || 'dotnet-models.zip';
+          downloadBlob(zipContent, finalFileName, 'application/zip');
         } else {
-          // Multiple files - create combined content
-          const zipContent = createZipContent(files);
-          downloadBlob(zipContent, 'dotnet-models.cs', 'text/plain;charset=utf-8');
+          // Multiple files - download each file individually
+          for (const [fileName, content] of Object.entries(files)) {
+            downloadBlob(content, fileName, 'text/plain;charset=utf-8');
+          }
         }
         
         modal.classList.add('hidden');
