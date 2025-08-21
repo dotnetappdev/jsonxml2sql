@@ -1876,11 +1876,21 @@ namespace {{NAMESPACE}}.Extensions
       const modal = document.getElementById('sqlTablesModal');
       if (!modal) return;
       
-      // Show ZIP file option if there are relationships
-      const hasRelationships = (designerState.links || []).length > 0;
+      // Show ZIP file option if there are multiple tables
+      const groups = collectRootArrays();
+      const hasMultipleTables = groups.length > 1;
       const zipOption = document.getElementById('sqlTablesZipFileOption');
+      const zipFileName = document.getElementById('sqlTablesZipFileName');
       if (zipOption) {
-        zipOption.style.display = hasRelationships ? 'block' : 'none';
+        zipOption.style.display = hasMultipleTables ? 'block' : 'none';
+      }
+      if (zipFileName) {
+        zipFileName.style.display = 'none'; // Initially hidden, will show when ZIP is checked
+      }
+      // Reset ZIP checkbox
+      const zipCheckbox = document.getElementById('sqlTablesZipFile');
+      if (zipCheckbox) {
+        zipCheckbox.checked = false;
       }
       
       modal.classList.remove('hidden');
@@ -1890,6 +1900,15 @@ namespace {{NAMESPACE}}.Extensions
         document.getElementById('sqlTablesSave')?.removeEventListener('click', onSave);
         document.getElementById('sqlTablesCancel')?.removeEventListener('click', onCancel);
         document.getElementById('sqlTablesModalClose')?.removeEventListener('click', onCancel);
+        document.getElementById('sqlTablesZipFile')?.removeEventListener('change', onZipToggle);
+      };
+      
+      const onZipToggle = () => {
+        const isChecked = document.getElementById('sqlTablesZipFile').checked;
+        const zipFileNameDiv = document.getElementById('sqlTablesZipFileName');
+        if (zipFileNameDiv) {
+          zipFileNameDiv.style.display = isChecked ? 'block' : 'none';
+        }
       };
       
       const onSave = () => {
@@ -1897,6 +1916,7 @@ namespace {{NAMESPACE}}.Extensions
         const autoId = document.getElementById('sqlTablesAutoId').checked;
         const includeData = document.getElementById('sqlTablesIncludeData').checked;
         const generateZipFile = document.getElementById('sqlTablesZipFile').checked;
+        const zipFileName = document.getElementById('sqlTablesZipFileNameInput').value.trim();
         
         if (!fileName) return;
         
@@ -1928,7 +1948,7 @@ namespace {{NAMESPACE}}.Extensions
             files['_relationships.sql'] = relationshipDoc;
           }
           const zipContent = createZipContent(files, true); // true flag for actual ZIP
-          const finalFileName = fileName.endsWith('.zip') ? fileName : fileName.replace(/\.[^.]*$/, '') + '.zip';
+          const finalFileName = zipFileName || 'tables.zip';
           downloadBlob(zipContent, finalFileName, 'application/zip');
         } else {
           // Multiple files - download each file individually
@@ -1960,6 +1980,10 @@ namespace {{NAMESPACE}}.Extensions
       document.getElementById('sqlTablesSave')?.addEventListener('click', onSave);
       document.getElementById('sqlTablesCancel')?.addEventListener('click', onCancel);
       document.getElementById('sqlTablesModalClose')?.addEventListener('click', onCancel);
+      document.getElementById('sqlTablesZipFile')?.addEventListener('change', onZipToggle);
+      
+      // Initialize ZIP filename visibility
+      onZipToggle();
     }
 
     function populateRelationshipConfiguration() {
@@ -2018,11 +2042,21 @@ namespace {{NAMESPACE}}.Extensions
       // Populate relationship configuration
       populateRelationshipConfiguration();
       
-      // Show ZIP file option if there are relationships
-      const hasRelationships = (designerState.links || []).length > 0;
+      // Show ZIP file option if there are multiple tables
+      const groups = collectRootArrays();
+      const hasMultipleTables = groups.length > 1;
       const zipOption = document.getElementById('dotnetZipFileOption');
+      const zipFileName = document.getElementById('dotnetZipFileName');
       if (zipOption) {
-        zipOption.style.display = hasRelationships ? 'block' : 'none';
+        zipOption.style.display = hasMultipleTables ? 'block' : 'none';
+      }
+      if (zipFileName) {
+        zipFileName.style.display = 'none'; // Initially hidden, will show when ZIP is checked
+      }
+      // Reset ZIP checkbox
+      const zipCheckbox = document.getElementById('dotnetZipFile');
+      if (zipCheckbox) {
+        zipCheckbox.checked = false;
       }
       
       modal.classList.remove('hidden');
@@ -2033,6 +2067,15 @@ namespace {{NAMESPACE}}.Extensions
         document.getElementById('dotnetModelsCancel')?.removeEventListener('click', onCancel);
         document.getElementById('dotnetModelsModalClose')?.removeEventListener('click', onCancel);
         document.getElementById('dotnetForeignKeys')?.removeEventListener('change', onForeignKeyToggle);
+        document.getElementById('dotnetZipFile')?.removeEventListener('change', onDotnetZipToggle);
+      };
+      
+      const onDotnetZipToggle = () => {
+        const isChecked = document.getElementById('dotnetZipFile').checked;
+        const zipFileNameDiv = document.getElementById('dotnetZipFileName');
+        if (zipFileNameDiv) {
+          zipFileNameDiv.style.display = isChecked ? 'block' : 'none';
+        }
       };
       
       const onForeignKeyToggle = () => {
@@ -2047,6 +2090,10 @@ namespace {{NAMESPACE}}.Extensions
       document.getElementById('dotnetForeignKeys')?.addEventListener('change', onForeignKeyToggle);
       onForeignKeyToggle(); // Initialize visibility
       
+      // Set up ZIP toggle listener
+      document.getElementById('dotnetZipFile')?.addEventListener('change', onDotnetZipToggle);
+      onDotnetZipToggle(); // Initialize visibility
+      
       const onSave = async () => {
         const namespace = document.getElementById('dotnetNamespace').value.trim();
         const usePlural = document.getElementById('dotnetPlural').checked;
@@ -2054,6 +2101,7 @@ namespace {{NAMESPACE}}.Extensions
         const includeForeignKeys = document.getElementById('dotnetForeignKeys').checked;
         const generateCrudService = document.getElementById('dotnetCrudService').checked;
         const generateZipFile = document.getElementById('dotnetZipFile').checked;
+        const zipFileName = document.getElementById('dotnetZipFileNameInput').value.trim();
         
         if (!namespace) {
           showModal('Please enter a namespace.', 'Namespace required');
@@ -2160,7 +2208,8 @@ namespace {{NAMESPACE}}.Extensions
         } else if (generateZipFile) {
           // ZIP file requested - generate actual ZIP with separate files
           const zipContent = createZipContent(files, true); // true flag for actual ZIP
-          downloadBlob(zipContent, 'dotnet-models.zip', 'application/zip');
+          const finalFileName = zipFileName || 'dotnet-models.zip';
+          downloadBlob(zipContent, finalFileName, 'application/zip');
         } else {
           // Multiple files - download each file individually
           for (const [fileName, content] of Object.entries(files)) {
